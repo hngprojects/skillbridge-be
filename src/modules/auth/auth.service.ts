@@ -9,6 +9,12 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 
+export interface Organisation {
+  id: string;
+  name: string;
+  [key: string]: unknown;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -17,8 +23,6 @@ export interface AuthUser {
   fullname: string;
   avatar_url: string | null;
   role: string;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 export interface AuthTokens {
@@ -30,7 +34,7 @@ export interface AuthTokens {
 export interface AuthResponse extends AuthTokens {
   data: {
     user: AuthUser;
-    organisations: [];
+    organisations: Organisation[];
   };
 }
 
@@ -143,8 +147,6 @@ export class AuthService {
       fullname: user.fullname,
       avatar_url: user.avatar_url,
       role: user.role,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
     };
   }
 }

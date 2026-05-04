@@ -6,13 +6,21 @@ import {
 } from '@nestjs/common';
 import { map, Observable } from 'rxjs';
 
-export interface ApiResponse<T> {
+type MessagePayload = {
+  message: string;
+} & Record<string, unknown>;
+
+type PaginatedPayload<T> = {
+  paginationMeta: Record<string, unknown>;
+  payload: T;
+} & Record<string, unknown>;
+
+export type ApiResponse<T> = {
   status_code: number;
   message: string;
   data?: T;
-  [key: string]: unknown;
   meta?: Record<string, unknown>;
-}
+} & Record<string, unknown>;
 
 @Injectable()
 export class TransformInterceptor<T>
@@ -35,11 +43,8 @@ export class TransformInterceptor<T>
           typeof payload === 'object' &&
           'paginationMeta' in (payload as object)
         ) {
-          const { paginationMeta, payload: data, ...rest } = payload as unknown as {
-            paginationMeta: Record<string, unknown>;
-            payload: T;
-            [key: string]: unknown;
-          };
+          const { paginationMeta, payload: data, ...rest } =
+            payload as PaginatedPayload<T>;
           return {
             ...baseResponse,
             data,
@@ -53,7 +58,7 @@ export class TransformInterceptor<T>
           !Array.isArray(payload) &&
           'message' in payload
         ) {
-          const { message, ...data } = payload as Record<string, unknown>;
+          const { message, ...data } = payload as MessagePayload;
           return {
             status_code: statusCode,
             message: String(message),

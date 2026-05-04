@@ -12,7 +12,6 @@ export class HealthController {
     return {
       status_code: 200,
       message: 'success',
-      status: 'ok',
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
     };

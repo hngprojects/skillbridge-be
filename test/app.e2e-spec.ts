@@ -31,8 +31,8 @@ describe('Health (e2e)', () => {
       .expect((res) => {
         expect(res.body.status_code).toBe(200);
         expect(res.body.message).toBe('success');
-        expect(res.body.status).toBe('ok');
         expect(res.body.data).toBeUndefined();
+        expect(res.body.uptime).toEqual(expect.any(Number));
       });
   });
 
