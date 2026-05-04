@@ -2,6 +2,13 @@ import { registerAs } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { env } from './env';
 
+const sslConfig = env.DATABASE_SSL
+  ? {
+      ca: env.DATABASE_SSL_CA,
+      rejectUnauthorized: true,
+    }
+  : false;
+
 export const databaseConfig = registerAs(
   'database',
   (): TypeOrmModuleOptions => ({
@@ -15,7 +22,7 @@ export const databaseConfig = registerAs(
     migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
     synchronize: env.DATABASE_SYNC,
     logging: env.DATABASE_LOGGING,
-    ssl: env.DATABASE_SSL ? { rejectUnauthorized: false } : false,
+    ssl: sslConfig,
     autoLoadEntities: true,
   }),
 );

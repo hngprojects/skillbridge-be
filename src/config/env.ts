@@ -4,6 +4,10 @@ import { z } from 'zod';
 
 dotenv.config();
 
+const booleanString = z
+  .union([z.boolean(), z.enum(['true', 'false'])])
+  .transform((v) => v === true || v === 'true');
+
 export const env = createEnv({
   server: {
     NODE_ENV: z
@@ -16,18 +20,10 @@ export const env = createEnv({
     DATABASE_USER: z.string().min(1),
     DATABASE_PASSWORD: z.string(),
     DATABASE_NAME: z.string().min(1),
-    DATABASE_SYNC: z
-      .union([z.boolean(), z.enum(['true', 'false'])])
-      .default(false)
-      .transform((v) => v === true || v === 'true'),
-    DATABASE_LOGGING: z
-      .union([z.boolean(), z.enum(['true', 'false'])])
-      .default(false)
-      .transform((v) => v === true || v === 'true'),
-    DATABASE_SSL: z
-      .union([z.boolean(), z.enum(['true', 'false'])])
-      .default(false)
-      .transform((v) => v === true || v === 'true'),
+    DATABASE_SYNC: booleanString.default(false),
+    DATABASE_LOGGING: booleanString.default(false),
+    DATABASE_SSL: booleanString.default(false),
+    DATABASE_SSL_CA: z.string().optional(),
 
     JWT_ACCESS_SECRET: z
       .string()
@@ -38,13 +34,13 @@ export const env = createEnv({
       .min(32, 'JWT_REFRESH_SECRET must be at least 32 chars'),
     JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
 
-    CORS_ORIGIN: z.string().default('*'),
-    SWAGGER_ENABLED: z
-      .union([z.boolean(), z.enum(['true', 'false'])])
-      .default(true)
-      .transform((v) => v === true || v === 'true'),
+    CORS_ORIGIN: z.string().default('http://localhost:3000'),
+    SWAGGER_ENABLED: booleanString.default(true),
     RESEND_API_KEY: z.string().min(1),
     RESEND_MAIL_FROM: z.email(),
+    SEED_ADMIN_EMAIL: z.email().default('admin@example.com'),
+    SEED_ADMIN_PASSWORD: z.string().min(12).default('Admin@123456'),
+    SEED_ADMIN_FULL_NAME: z.string().min(1).default('Admin User'),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

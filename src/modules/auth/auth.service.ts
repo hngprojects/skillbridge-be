@@ -54,8 +54,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const user = await this.usersService.findOne(payload.sub);
-    if (!user.refreshTokenHash) {
+    const user = await this.usersService.findOneOrNull(payload.sub);
+    if (!user?.refreshTokenHash) {
       throw new UnauthorizedException('Refresh token has been revoked');
     }
 

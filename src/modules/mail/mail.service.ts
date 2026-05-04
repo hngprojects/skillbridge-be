@@ -4,7 +4,7 @@ import { env } from '../../config/env';
 import { SendMailOptions } from './mail.types';
 
 @Injectable()
-class MailService {
+export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly client = new Resend(env.RESEND_API_KEY);
 
@@ -13,13 +13,17 @@ class MailService {
       throw new Error('Sending a mail requires either `html` or `text`.');
     }
 
-    const { data, error } = await this.client.emails.send({
+    const basePayload = {
       from: from ?? env.RESEND_MAIL_FROM,
       to,
       subject,
-      html,
-      text,
-    } as Parameters<Resend['emails']['send']>[0]);
+    };
+
+    const payload: Parameters<Resend['emails']['send']>[0] = html
+      ? { ...basePayload, html, ...(text ? { text } : {}) }
+      : { ...basePayload, text: text! };
+
+    const { data, error } = await this.client.emails.send(payload);
 
     if (error) {
       this.logger.error(
@@ -31,5 +35,3 @@ class MailService {
     return data;
   }
 }
-
-export default MailService;

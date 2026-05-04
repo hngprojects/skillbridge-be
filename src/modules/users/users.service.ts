@@ -9,7 +9,7 @@ import { UserModelAction } from './actions/user.action';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from './entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 
 const BCRYPT_ROUNDS = 10;
 const NO_TRANSACTION = { transactionOptions: { useTransaction: false as const } };
@@ -31,7 +31,7 @@ export class UsersService {
         email: dto.email,
         password: passwordHash,
         fullName: dto.fullName,
-        role: dto.role,
+        role: UserRole.USER,
       },
     });
   }
@@ -49,6 +49,12 @@ export class UsersService {
     });
     if (!user) throw new NotFoundException(`User ${id} not found`);
     return user;
+  }
+
+  findOneOrNull(id: string): Promise<User | null> {
+    return this.userModelAction.get({
+      identifierOptions: { id },
+    });
   }
 
   findByEmail(email: string): Promise<User | null> {

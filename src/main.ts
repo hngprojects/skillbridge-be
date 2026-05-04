@@ -7,6 +7,10 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { env } from './config/env';
 
+const corsOrigins = env.CORS_ORIGIN.split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
@@ -15,7 +19,7 @@ async function bootstrap() {
   app.use(helmet());
   app.use(compression());
   app.enableCors({
-    origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(','),
+    origin: corsOrigins,
     credentials: true,
   });
   app.setGlobalPrefix('api', { exclude: ['health'] });
