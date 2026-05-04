@@ -7,8 +7,9 @@ import {
 import { map, Observable } from 'rxjs';
 
 export interface ApiResponse<T> {
-  success: true;
-  data: T;
+  status_code: number;
+  message: string;
+  data?: T;
   meta?: Record<string, unknown>;
 }
 
@@ -16,11 +17,18 @@ export interface ApiResponse<T> {
 export class TransformInterceptor<T>
   implements NestInterceptor<T, ApiResponse<T>> {
   intercept(
-    _context: ExecutionContext,
+    context: ExecutionContext,
     next: CallHandler<T>,
   ): Observable<ApiResponse<T>> {
+    const response = context.switchToHttp().getResponse<{ statusCode: number }>();
     return next.handle().pipe(
       map((payload) => {
+        const statusCode = response.statusCode;
+        const baseResponse = {
+          status_code: statusCode,
+          message: 'success',
+        };
+
         if (
           payload &&
           typeof payload === 'object' &&
@@ -32,12 +40,22 @@ export class TransformInterceptor<T>
             [key: string]: unknown;
           };
           return {
-            success: true,
-            data: data,
+            ...baseResponse,
+            data,
             meta: { ...rest, ...paginationMeta },
           };
         }
-        return { success: true, data: payload };
+
+        if (payload && typeof payload === 'object' && 'message' in payload) {
+          const { message, ...data } = payload as Record<string, unknown>;
+          return {
+            status_code: statusCode,
+            message: String(message),
+            data: Object.keys(data).length ? (data as T) : undefined,
+          };
+        }
+
+        return { ...baseResponse, data: payload };
       }),
     );
   }

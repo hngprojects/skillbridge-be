@@ -17,6 +17,7 @@ import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { HealthModule } from './modules/health/health.module';
 import { MailModule } from './modules/mail/mail.module';
 import { UsersModule } from './modules/users/users.module';
+import { ProbeController } from './probe.controller';
 
 @Module({
   imports: [
@@ -50,5 +51,6 @@ import { UsersModule } from './modules/users/users.module';
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
   ],
+  controllers: [ProbeController],
 })
 export class AppModule {}

@@ -1,7 +1,7 @@
 {
-  "name": "nestjs-starter",
+  "name": "skillbridge-be",
   "version": "0.0.1",
-  "description": "",
+  "description": "SkillBridge backend built from the HNG NestJS boilerplate conventions",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
@@ -22,6 +22,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "check-format": "prettier --check .",
+    "check-lint": "eslint . --ext ts --ext js",
     "typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts",
     "migration:generate": "pnpm typeorm migration:generate",
     "migration:create": "typeorm-ts-node-commonjs migration:create",
@@ -103,6 +105,20 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^@database/(.*)$": "<rootDir>/database/$1",
+      "^@modules/(.*)$": "<rootDir>/modules/$1",
+      "^@shared/(.*)$": "<rootDir>/common/$1",
+      "^@config/(.*)$": "<rootDir>/config/$1",
+      "^@guards/(.*)$": "<rootDir>/modules/auth/guards/$1"
+    }
+  },
+  "_moduleAliases": {
+    "@database": "./dist/database",
+    "@modules": "./dist/modules",
+    "@shared": "./dist/common",
+    "@config": "./dist/config",
+    "@guards": "./dist/modules/auth/guards"
   }
 }
