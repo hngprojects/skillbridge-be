@@ -5,6 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor';
 import { HealthModule } from '../src/modules/health/health.module';
+import { ProbeController } from '../src/probe.controller';
 
 describe('Health (e2e)', () => {
   let app: INestApplication<App>;
@@ -12,6 +13,7 @@ describe('Health (e2e)', () => {
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [HealthModule],
+      controllers: [ProbeController],
       providers: [
         { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
       ],
@@ -29,6 +31,18 @@ describe('Health (e2e)', () => {
         expect(res.body.status_code).toBe(200);
         expect(res.body.message).toBe('success');
         expect(res.body.data.status).toBe('ok');
+      });
+  });
+
+  it('GET /probe → 200', () => {
+    return request(app.getHttpServer())
+      .get('/probe')
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.status_code).toBe(200);
+        expect(res.body.message).toBe('server is ready');
+        expect(res.body.status).toBe('ok');
+        expect(res.body.data).toBeUndefined();
       });
   });
 

@@ -10,12 +10,16 @@ import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 
 export interface AuthTokens {
-  accessToken: string;
-  refreshToken: string;
+  message: string;
+  access_token: string;
+  refresh_token: string;
 }
 
 export interface AuthResponse extends AuthTokens {
-  user: Omit<User, 'password' | 'refreshTokenHash' | 'deletedAt'>;
+  data: {
+    user: Omit<User, 'password' | 'refreshTokenHash' | 'deletedAt'>;
+    organisations: [];
+  };
 }
 
 @Injectable()
@@ -31,7 +35,7 @@ export class AuthService {
       password: dto.password,
       fullName: dto.fullName,
     });
-    return this.issueTokens(user);
+    return this.issueTokens(user, 'User created successfully');
   }
 
   async login(dto: LoginDto): Promise<AuthResponse> {
@@ -41,7 +45,7 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-    return this.issueTokens(user);
+    return this.issueTokens(user, 'Login successful');
   }
 
   async refresh(refreshToken: string): Promise<AuthTokens> {
@@ -62,8 +66,8 @@ export class AuthService {
     const matches = await bcrypt.compare(refreshToken, user.refreshTokenHash);
     if (!matches) throw new UnauthorizedException('Invalid refresh token');
 
-    const tokens = await this.signTokens(user);
-    await this.persistRefreshToken(user.id, tokens.refreshToken);
+    const tokens = await this.signTokens(user, 'Token refreshed successfully');
+    await this.persistRefreshToken(user.id, tokens.refresh_token);
     return tokens;
   }
 
@@ -75,9 +79,9 @@ export class AuthService {
     return this.usersService.findOne(userId);
   }
 
-  private async issueTokens(user: User): Promise<AuthResponse> {
-    const tokens = await this.signTokens(user);
-    await this.persistRefreshToken(user.id, tokens.refreshToken);
+  private async issueTokens(user: User, message: string): Promise<AuthResponse> {
+    const tokens = await this.signTokens(user, message);
+    await this.persistRefreshToken(user.id, tokens.refresh_token);
 
     const {
       password: _password,
@@ -86,10 +90,16 @@ export class AuthService {
       ...safeUser
     } = user;
 
-    return { ...tokens, user: safeUser };
+    return {
+      ...tokens,
+      data: {
+        user: safeUser,
+        organisations: [],
+      },
+    };
   }
 
-  private async signTokens(user: User): Promise<AuthTokens> {
+  private async signTokens(user: User, message: string): Promise<AuthTokens> {
     const payload: JwtPayload = { sub: user.id, email: user.email };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
@@ -101,7 +111,11 @@ export class AuthService {
         expiresIn: env.JWT_REFRESH_EXPIRES_IN as StringValue,
       }),
     ]);
-    return { accessToken, refreshToken };
+    return {
+      message,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    };
   }
 
   private async persistRefreshToken(

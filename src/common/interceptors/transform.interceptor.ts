@@ -10,6 +10,7 @@ export interface ApiResponse<T> {
   status_code: number;
   message: string;
   data?: T;
+  [key: string]: unknown;
   meta?: Record<string, unknown>;
 }
 
@@ -46,12 +47,17 @@ export class TransformInterceptor<T>
           };
         }
 
-        if (payload && typeof payload === 'object' && 'message' in payload) {
+        if (
+          payload &&
+          typeof payload === 'object' &&
+          !Array.isArray(payload) &&
+          'message' in payload
+        ) {
           const { message, ...data } = payload as Record<string, unknown>;
           return {
             status_code: statusCode,
             message: String(message),
-            data: Object.keys(data).length ? (data as T) : undefined,
+            ...data,
           };
         }
 
