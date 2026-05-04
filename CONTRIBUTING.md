@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for contributing to **nestjs-starter**! This guide covers setup, branching, commits, and the PR workflow.
+Thanks for contributing to **SkillBridge Backend**! This guide covers setup, branching, commits, and the PR workflow.
 
 ## Prerequisites
 

@@ -5,7 +5,6 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
-  Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -22,7 +21,6 @@ export class User {
   id: string;
 
   @ApiProperty({ example: 'user@example.com' })
-  @Index({ unique: true })
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
 

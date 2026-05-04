@@ -23,7 +23,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "check-format": "prettier --check .",
-    "check-lint": "eslint . --ext ts --ext js",
+    "check-lint": "eslint \"{src,test}/**/*.ts\"",
     "typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts",
     "migration:generate": "pnpm typeorm migration:generate",
     "migration:create": "typeorm-ts-node-commonjs migration:create",
@@ -32,7 +32,8 @@
     "migration:show": "pnpm typeorm migration:show",
     "schema:drop": "pnpm typeorm schema:drop",
     "seed": "ts-node -r tsconfig-paths/register src/database/seeds/run-seed.ts",
-    "db:reset": "pnpm schema:drop && pnpm migration:run && pnpm seed"
+    "db:reset": "pnpm schema:drop && pnpm migration:run && pnpm seed",
+    "start:prod:migrate": "typeorm migration:run -d dist/database/data-source.js && node dist/main.js"
   },
   "dependencies": {
     "@hng-sdk/orm": "^0.0.0",
@@ -113,12 +114,5 @@
       "^@config/(.*)$": "<rootDir>/config/$1",
       "^@guards/(.*)$": "<rootDir>/modules/auth/guards/$1"
     }
-  },
-  "_moduleAliases": {
-    "@database": "./dist/database",
-    "@modules": "./dist/modules",
-    "@shared": "./dist/common",
-    "@config": "./dist/config",
-    "@guards": "./dist/modules/auth/guards"
   }
 }

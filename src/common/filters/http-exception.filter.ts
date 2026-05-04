@@ -31,9 +31,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
         message = (r.message as string | string[]) ?? message;
         error = (r.error as string) ?? exception.name;
       }
-    } else if (exception instanceof Error) {
-      message = exception.message;
-      error = exception.name;
     }
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {

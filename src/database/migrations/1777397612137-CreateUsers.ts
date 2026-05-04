@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
+import { MigrationInterface, QueryRunner, Table } from 'typeorm';
 
 export class CreateUsers1777397612137 implements MigrationInterface {
   name = 'CreateUsers1777397612137';
@@ -71,19 +71,9 @@ export class CreateUsers1777397612137 implements MigrationInterface {
       }),
       true,
     );
-
-    await queryRunner.createIndex(
-      'users',
-      new TableIndex({
-        name: 'IDX_users_email',
-        columnNames: ['email'],
-        isUnique: true,
-      }),
-    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropIndex('users', 'IDX_users_email');
     await queryRunner.dropTable('users');
     await queryRunner.query(`DROP TYPE IF EXISTS "users_role_enum"`);
   }
