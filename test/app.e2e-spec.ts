@@ -6,6 +6,7 @@ import { App } from 'supertest/types';
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor';
 import { HealthModule } from '../src/modules/health/health.module';
 import { ProbeController } from '../src/probe.controller';
+import { WelcomeController } from '../src/welcome.controller';
 
 describe('Health (e2e)', () => {
   let app: INestApplication<App>;
@@ -13,7 +14,7 @@ describe('Health (e2e)', () => {
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [HealthModule],
-      controllers: [ProbeController],
+      controllers: [ProbeController, WelcomeController],
       providers: [
         { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
       ],
@@ -30,7 +31,8 @@ describe('Health (e2e)', () => {
       .expect((res) => {
         expect(res.body.status_code).toBe(200);
         expect(res.body.message).toBe('success');
-        expect(res.body.data.status).toBe('ok');
+        expect(res.body.status).toBe('ok');
+        expect(res.body.data).toBeUndefined();
       });
   });
 
@@ -40,9 +42,18 @@ describe('Health (e2e)', () => {
       .expect(200)
       .expect((res) => {
         expect(res.body.status_code).toBe(200);
-        expect(res.body.message).toBe('server is ready');
-        expect(res.body.status).toBe('ok');
+        expect(res.body.message).toBe('I am the NestJs api responding');
         expect(res.body.data).toBeUndefined();
+      });
+  });
+
+  it.each(['/', '/api', '/api/v1'])('GET %s → 200', (path) => {
+    return request(app.getHttpServer())
+      .get(path)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.status_code).toBe(200);
+        expect(res.body.message).toBe('I am the NestJs api responding');
       });
   });
 

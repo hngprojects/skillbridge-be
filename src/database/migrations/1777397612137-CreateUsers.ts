@@ -33,10 +33,22 @@ export class CreateUsers1777397612137 implements MigrationInterface {
             isNullable: false,
           },
           {
-            name: 'full_name',
+            name: 'first_name',
             type: 'varchar',
             length: '255',
             isNullable: false,
+          },
+          {
+            name: 'last_name',
+            type: 'varchar',
+            length: '255',
+            isNullable: false,
+          },
+          {
+            name: 'avatar_url',
+            type: 'varchar',
+            length: '500',
+            isNullable: true,
           },
           {
             name: 'role',

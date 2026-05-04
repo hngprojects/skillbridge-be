@@ -10,6 +10,8 @@ export class HealthController {
   @ApiOperation({ summary: 'Liveness probe' })
   check() {
     return {
+      status_code: 200,
+      message: 'success',
       status: 'ok',
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),

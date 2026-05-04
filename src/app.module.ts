@@ -18,6 +18,7 @@ import { HealthModule } from './modules/health/health.module';
 import { MailModule } from './modules/mail/mail.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProbeController } from './probe.controller';
+import { WelcomeController } from './welcome.controller';
 
 @Module({
   imports: [
@@ -51,6 +52,6 @@ import { ProbeController } from './probe.controller';
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
   ],
-  controllers: [ProbeController],
+  controllers: [ProbeController, WelcomeController],
 })
 export class AppModule {}

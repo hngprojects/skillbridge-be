@@ -9,6 +9,18 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  fullname: string;
+  avatar_url: string | null;
+  role: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface AuthTokens {
   message: string;
   access_token: string;
@@ -17,7 +29,7 @@ export interface AuthTokens {
 
 export interface AuthResponse extends AuthTokens {
   data: {
-    user: Omit<User, 'password' | 'refreshTokenHash' | 'deletedAt'>;
+    user: AuthUser;
     organisations: [];
   };
 }
@@ -33,7 +45,9 @@ export class AuthService {
     const user = await this.usersService.create({
       email: dto.email,
       password: dto.password,
-      fullName: dto.fullName,
+      first_name: dto.first_name,
+      last_name: dto.last_name,
+      profile_pic_url: dto.profile_pic_url,
     });
     return this.issueTokens(user, 'User created successfully');
   }
@@ -75,25 +89,19 @@ export class AuthService {
     await this.usersService.setRefreshTokenHash(userId, null);
   }
 
-  async getProfile(userId: string): Promise<User> {
-    return this.usersService.findOne(userId);
+  async getProfile(userId: string): Promise<AuthUser> {
+    const user = await this.usersService.findOne(userId);
+    return this.toAuthUser(user);
   }
 
   private async issueTokens(user: User, message: string): Promise<AuthResponse> {
     const tokens = await this.signTokens(user, message);
     await this.persistRefreshToken(user.id, tokens.refresh_token);
 
-    const {
-      password: _password,
-      refreshTokenHash: _hash,
-      deletedAt: _deletedAt,
-      ...safeUser
-    } = user;
-
     return {
       ...tokens,
       data: {
-        user: safeUser,
+        user: this.toAuthUser(user),
         organisations: [],
       },
     };
@@ -124,5 +132,19 @@ export class AuthService {
   ): Promise<void> {
     const hash = await bcrypt.hash(refreshToken, 10);
     await this.usersService.setRefreshTokenHash(userId, hash);
+  }
+
+  private toAuthUser(user: User): AuthUser {
+    return {
+      id: user.id,
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      fullname: user.fullname,
+      avatar_url: user.avatar_url,
+      role: user.role,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 }

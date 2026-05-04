@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Exclude } from 'class-transformer';
+import { Exclude, Expose } from 'class-transformer';
 import {
   Column,
   CreateDateColumn,
@@ -29,8 +29,22 @@ export class User {
   password: string;
 
   @ApiProperty()
-  @Column({ type: 'varchar', length: 255, name: 'full_name' })
-  fullName: string;
+  @Column({ type: 'varchar', length: 255 })
+  first_name: string;
+
+  @ApiProperty()
+  @Column({ type: 'varchar', length: 255 })
+  last_name: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  avatar_url: string | null;
+
+  @ApiProperty()
+  @Expose()
+  get fullname(): string {
+    return `${this.first_name} ${this.last_name}`.trim();
+  }
 
   @ApiProperty({ enum: UserRole, default: UserRole.USER })
   @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })

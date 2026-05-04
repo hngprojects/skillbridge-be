@@ -30,7 +30,9 @@ export class UsersService {
       createPayload: {
         email: dto.email,
         password: passwordHash,
-        fullName: dto.fullName,
+        first_name: dto.first_name,
+        last_name: dto.last_name,
+        avatar_url: dto.profile_pic_url ?? null,
         role: UserRole.USER,
       },
     });
@@ -64,7 +66,11 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto): Promise<User> {
     await this.findOne(id);
 
-    const payload: Partial<User> = { ...dto };
+    const { profile_pic_url: profilePicUrl, ...userDto } = dto;
+    const payload: Partial<User> = {
+      ...userDto,
+      ...(profilePicUrl !== undefined ? { avatar_url: profilePicUrl } : {}),
+    };
     if (dto.password) {
       payload.password = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     }
