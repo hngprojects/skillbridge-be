@@ -1,0 +1,13 @@
+process.env.NODE_ENV = 'test';
+process.env.DATABASE_HOST = 'localhost';
+process.env.DATABASE_PORT = '5432';
+process.env.DATABASE_USER = 'postgres';
+process.env.DATABASE_PASSWORD = 'postgres';
+process.env.DATABASE_NAME = 'skillbridge_test';
+process.env.DATABASE_SYNC = 'false';
+process.env.DATABASE_LOGGING = 'false';
+process.env.DATABASE_SSL = 'false';
+process.env.JWT_ACCESS_SECRET = 'test-access-secret-with-at-least-32-chars';
+process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-with-at-least-32-chars';
+process.env.RESEND_API_KEY = 'test-resend-api-key';
+process.env.RESEND_MAIL_FROM = 'test@example.com';
