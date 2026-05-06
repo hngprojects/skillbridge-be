@@ -47,6 +47,9 @@ lerna-debug.log*
 .temp
 .tmp
 
+# Local PRDs and working notes
+/markdown/
+
 # Runtime data
 pids
 *.pid
