@@ -36,6 +36,13 @@
 - Use `postgres` when changing `users`, future profile tables, refresh token storage, assessment data, scoring data, or reporting queries.
 - Use `documents:documents` when introducing a new domain, changing auth or role models, proposing service boundaries, or formalizing product/backend architecture.
 
+## Docs References
+- Read `docs/auth-module-specification.md` before changing auth flows, roles, cookies, onboarding-related auth fields, or session contracts.
+- Read `docs/database-schema.dbml` before changing tables, enums, relations, or introducing new persistence models.
+- Read `docs/candidate-domain-specification.md` before changing candidate onboarding, candidate profile shape, readiness state, publishability, or candidate-facing endpoints.
+- Read `docs/employer-domain-specification.md` before changing employer onboarding, employer profile shape, shortlist flows, contact flows, or employer-facing endpoints.
+- If code and docs disagree, call out the mismatch clearly and propose which source should become canonical.
+
 ## Testing And Startup Flow
 - Before starting the backend server, check if it is already running.
 - Reuse the active server if it is healthy instead of starting a second copy.
