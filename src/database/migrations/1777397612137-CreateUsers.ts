@@ -6,7 +6,7 @@ export class CreateUsers1777397612137 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
     await queryRunner.query(
-      `CREATE TYPE "users_role_enum" AS ENUM ('admin', 'user')`,
+      `CREATE TYPE "users_role_enum" AS ENUM ('admin', 'candidate', 'employer')`,
     );
 
     await queryRunner.createTable(
@@ -51,9 +51,27 @@ export class CreateUsers1777397612137 implements MigrationInterface {
             isNullable: true,
           },
           {
+            name: 'country',
+            type: 'varchar',
+            length: '100',
+            isNullable: false,
+          },
+          {
+            name: 'is_verified',
+            type: 'boolean',
+            default: false,
+            isNullable: false,
+          },
+          {
+            name: 'onboarding_complete',
+            type: 'boolean',
+            default: false,
+            isNullable: false,
+          },
+          {
             name: 'role',
             type: 'users_role_enum',
-            default: `'user'`,
+            default: `'candidate'`,
             isNullable: false,
           },
           {

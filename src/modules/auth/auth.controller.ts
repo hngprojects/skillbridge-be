@@ -5,18 +5,22 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
+  Res,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Request, Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import {
+  clearAuthCookies,
+  readCookie,
+  REFRESH_TOKEN_COOKIE,
+  setAuthCookies,
+} from './auth.cookies';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('auth')
@@ -26,37 +30,64 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @HttpCode(HttpStatus.CREATED)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Register a new user' })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  async register(
+    @Body() dto: RegisterDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const session = await this.authService.register(dto);
+    setAuthCookies(response, session);
+    return this.authService.toResponse(session);
   }
 
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Log in with email and password' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const session = await this.authService.login(dto);
+    setAuthCookies(response, session);
+    return this.authService.toResponse(session);
   }
 
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Issue a new access token from a refresh token' })
-  refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(dto.refresh_token);
+  @ApiOperation({ summary: 'Issue new auth cookies from the refresh cookie' })
+  async refresh(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const refreshToken = readCookie(request, REFRESH_TOKEN_COOKIE);
+    const tokens = await this.authService.refresh(refreshToken);
+    setAuthCookies(response, tokens);
+    return {
+      message: tokens.message,
+      status: 'success',
+    };
   }
 
-  @ApiBearerAuth()
+  @ApiCookieAuth()
   @Post('logout')
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Revoke the current refresh token' })
-  logout(@CurrentUser('sub') userId: string) {
-    return this.authService.logout(userId);
+  async logout(
+    @CurrentUser('sub') userId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    await this.authService.logout(userId);
+    clearAuthCookies(response);
+    return {
+      message: 'Logged out',
+      status: 'success',
+    };
   }
 
-  @ApiBearerAuth()
+  @ApiCookieAuth()
   @Get('me')
   @ApiOperation({ summary: 'Return the current authenticated user' })
   me(@CurrentUser() user: AuthenticatedUser) {

@@ -5,6 +5,7 @@ export interface AuthenticatedUser {
   sub: string;
   email: string;
   role: UserRole;
+  onboardingComplete: boolean;
 }
 
 export const CurrentUser = createParamDecorator(
