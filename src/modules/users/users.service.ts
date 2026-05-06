@@ -4,15 +4,16 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import * as argon2 from 'argon2';
 import { UserModelAction } from './actions/user.action';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User, UserRole } from './entities/user.entity';
 
-const BCRYPT_ROUNDS = 10;
-const NO_TRANSACTION = { transactionOptions: { useTransaction: false as const } };
+const NO_TRANSACTION = {
+  transactionOptions: { useTransaction: false as const },
+};
 
 @Injectable()
 export class UsersService {
@@ -21,10 +22,10 @@ export class UsersService {
   async create(dto: CreateUserDto): Promise<User> {
     const existing = await this.userModelAction.findByEmail(dto.email);
     if (existing) {
-      throw new ConflictException('Email already in use');
+      throw new ConflictException('Email already registered');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    const passwordHash = await argon2.hash(dto.password);
     return this.userModelAction.create({
       ...NO_TRANSACTION,
       createPayload: {
@@ -32,8 +33,11 @@ export class UsersService {
         password: passwordHash,
         first_name: dto.first_name,
         last_name: dto.last_name,
+        country: dto.country,
         avatar_url: dto.profile_pic_url ?? null,
-        role: UserRole.USER,
+        is_verified: false,
+        onboarding_complete: false,
+        role: UserRole.CANDIDATE,
       },
     });
   }
@@ -72,7 +76,7 @@ export class UsersService {
       ...(profilePicUrl !== undefined ? { avatar_url: profilePicUrl } : {}),
     };
     if (dto.password) {
-      payload.password = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+      payload.password = await argon2.hash(dto.password);
     }
 
     const updated = await this.userModelAction.update({

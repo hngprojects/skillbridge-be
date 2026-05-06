@@ -11,7 +11,8 @@ import {
 
 export enum UserRole {
   ADMIN = 'admin',
-  USER = 'user',
+  CANDIDATE = 'candidate',
+  EMPLOYER = 'employer',
 }
 
 @Entity('users')
@@ -40,18 +41,35 @@ export class User {
   @Column({ type: 'varchar', length: 500, nullable: true })
   avatar_url: string | null;
 
+  @ApiProperty({ example: 'Nigeria' })
+  @Column({ type: 'varchar', length: 100 })
+  country: string;
+
+  @ApiProperty({ default: false })
+  @Column({ type: 'boolean', default: false })
+  is_verified: boolean;
+
+  @ApiProperty({ default: false })
+  @Column({ type: 'boolean', default: false })
+  onboarding_complete: boolean;
+
   @ApiProperty()
   @Expose()
   get fullname(): string {
     return `${this.first_name} ${this.last_name}`.trim();
   }
 
-  @ApiProperty({ enum: UserRole, default: UserRole.USER })
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
+  @ApiProperty({ enum: UserRole, default: UserRole.CANDIDATE })
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.CANDIDATE })
   role: UserRole;
 
   @Exclude()
-  @Column({ type: 'varchar', length: 500, nullable: true, name: 'refresh_token_hash' })
+  @Column({
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+    name: 'refresh_token_hash',
+  })
   refreshTokenHash: string | null;
 
   @ApiProperty()

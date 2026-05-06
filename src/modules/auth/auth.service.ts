@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import * as argon2 from 'argon2';
 import type { StringValue } from 'ms';
 import { env } from '../../config/env';
 import { User } from '../users/entities/user.entity';
@@ -22,20 +22,29 @@ export interface AuthUser {
   last_name: string;
   fullname: string;
   avatar_url: string | null;
+  country: string;
   role: string;
+  is_verified: boolean;
+  onboardingComplete: boolean;
 }
 
 export interface AuthTokens {
   message: string;
-  access_token: string;
-  refresh_token: string;
+  accessToken: string;
+  refreshToken: string;
 }
 
-export interface AuthResponse extends AuthTokens {
+export interface AuthSession extends AuthTokens {
   data: {
     user: AuthUser;
     organisations: Organisation[];
   };
+}
+
+export interface AuthResponse {
+  message: string;
+  status: 'success';
+  data: AuthSession['data'];
 }
 
 @Injectable()
@@ -45,28 +54,31 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async register(dto: RegisterDto): Promise<AuthResponse> {
+  async register(dto: RegisterDto): Promise<AuthSession> {
     const user = await this.usersService.create({
       email: dto.email,
       password: dto.password,
-      first_name: dto.first_name,
-      last_name: dto.last_name,
+      first_name: dto.firstName,
+      last_name: dto.lastName,
+      country: dto.country,
       profile_pic_url: dto.profile_pic_url,
     });
     return this.issueTokens(user, 'User created successfully');
   }
 
-  async login(dto: LoginDto): Promise<AuthResponse> {
+  async login(dto: LoginDto): Promise<AuthSession> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const valid = await bcrypt.compare(dto.password, user.password);
+    const valid = await argon2.verify(user.password, dto.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     return this.issueTokens(user, 'Login successful');
   }
 
-  async refresh(refreshToken: string): Promise<AuthTokens> {
+  async refresh(refreshToken: string | undefined): Promise<AuthTokens> {
+    if (!refreshToken) throw new UnauthorizedException('Invalid refresh token');
+
     let payload: JwtPayload;
     try {
       payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
@@ -81,11 +93,11 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token has been revoked');
     }
 
-    const matches = await bcrypt.compare(refreshToken, user.refreshTokenHash);
+    const matches = await argon2.verify(user.refreshTokenHash, refreshToken);
     if (!matches) throw new UnauthorizedException('Invalid refresh token');
 
     const tokens = await this.signTokens(user, 'Token refreshed successfully');
-    await this.persistRefreshToken(user.id, tokens.refresh_token);
+    await this.persistRefreshToken(user.id, tokens.refreshToken);
     return tokens;
   }
 
@@ -98,9 +110,17 @@ export class AuthService {
     return this.toAuthUser(user);
   }
 
-  private async issueTokens(user: User, message: string): Promise<AuthResponse> {
+  toResponse(session: AuthSession): AuthResponse {
+    return {
+      message: session.message,
+      status: 'success',
+      data: session.data,
+    };
+  }
+
+  private async issueTokens(user: User, message: string): Promise<AuthSession> {
     const tokens = await this.signTokens(user, message);
-    await this.persistRefreshToken(user.id, tokens.refresh_token);
+    await this.persistRefreshToken(user.id, tokens.refreshToken);
 
     return {
       ...tokens,
@@ -112,7 +132,12 @@ export class AuthService {
   }
 
   private async signTokens(user: User, message: string): Promise<AuthTokens> {
-    const payload: JwtPayload = { sub: user.id, email: user.email };
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      onboardingComplete: user.onboarding_complete,
+    };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: env.JWT_ACCESS_SECRET,
@@ -125,8 +150,8 @@ export class AuthService {
     ]);
     return {
       message,
-      access_token: accessToken,
-      refresh_token: refreshToken,
+      accessToken,
+      refreshToken,
     };
   }
 
@@ -134,7 +159,7 @@ export class AuthService {
     userId: string,
     refreshToken: string,
   ): Promise<void> {
-    const hash = await bcrypt.hash(refreshToken, 10);
+    const hash = await argon2.hash(refreshToken);
     await this.usersService.setRefreshTokenHash(userId, hash);
   }
 
@@ -146,7 +171,10 @@ export class AuthService {
       last_name: user.last_name,
       fullname: user.fullname,
       avatar_url: user.avatar_url,
+      country: user.country,
       role: user.role,
+      is_verified: user.is_verified,
+      onboardingComplete: user.onboarding_complete,
     };
   }
 }
