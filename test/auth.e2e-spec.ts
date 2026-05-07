@@ -1,7 +1,8 @@
 import {
+  ConflictException,
   INestApplication,
   ValidationPipe,
-  ConflictException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
@@ -91,6 +92,12 @@ class InMemoryUsersService {
     return Promise.resolve(this.usersById.get(id) ?? null);
   }
 
+  async findOne(id: string): Promise<User> {
+    const user = this.usersById.get(id);
+    if (!user) throw new NotFoundException(`User ${id} not found`);
+    return user;
+  }
+
   async setRefreshTokenHash(id: string, hash: string | null): Promise<void> {
     const user = this.usersById.get(id);
     if (user) user.refreshTokenHash = hash;
@@ -106,6 +113,8 @@ const getSetCookies = (response: Response): string[] => {
 const findCookie = (cookies: string[], name: string): string =>
   cookies.find((cookie) => cookie.startsWith(`${name}=`)) ?? '';
 
+const cookiePair = (cookie: string): string => cookie.split(';')[0];
+
 const expectAuthCookies = (response: Response): string => {
   const cookies = getSetCookies(response);
   const accessCookie = findCookie(cookies, ACCESS_TOKEN_COOKIE);
@@ -116,7 +125,7 @@ const expectAuthCookies = (response: Response): string => {
   expect(refreshCookie).toContain('HttpOnly');
   expect(refreshCookie).toContain('SameSite=Strict');
 
-  return cookies.map((cookie) => cookie.split(';')[0]).join('; ');
+  return cookies.map(cookiePair).join('; ');
 };
 
 describe('Auth (e2e)', () => {
@@ -242,6 +251,87 @@ describe('Auth (e2e)', () => {
       status_code: 200,
       message: 'Logged out',
       status: 'success',
+    });
+  });
+
+  it('POST /auth/refresh rotates refresh cookies and rejects the previous refresh token', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(200);
+
+    const loginResponse = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(loginPayload)
+      .expect(200);
+    const loginCookies = getSetCookies(loginResponse);
+    const loginCookieHeader = loginCookies.map(cookiePair).join('; ');
+
+    const refreshResponse = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', loginCookieHeader)
+      .expect(200);
+    const refreshCookieHeader = expectAuthCookies(refreshResponse);
+
+    expect(refreshResponse.body).toMatchObject({
+      status_code: 200,
+      message: 'Token refreshed successfully',
+      status: 'success',
+    });
+    expect(refreshResponse.body.access_token).toBeUndefined();
+    expect(refreshResponse.body.refresh_token).toBeUndefined();
+    expect(
+      findCookie(getSetCookies(refreshResponse), REFRESH_TOKEN_COOKIE),
+    ).not.toBe(findCookie(loginCookies, REFRESH_TOKEN_COOKIE));
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', loginCookieHeader)
+      .expect(401)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          success: false,
+          status_code: 401,
+          message: 'Invalid refresh token',
+        });
+      });
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', refreshCookieHeader)
+      .expect(200);
+  });
+
+  it('GET /auth/me reads the access token from the httpOnly cookie', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(200);
+
+    const loginResponse = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(loginPayload)
+      .expect(200);
+    const authCookieHeader = expectAuthCookies(loginResponse);
+
+    const response = await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Cookie', authCookieHeader)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      status_code: 200,
+      message: 'success',
+      data: {
+        email: registerPayload.email,
+        first_name: registerPayload.firstName,
+        last_name: registerPayload.lastName,
+        fullname: `${registerPayload.firstName} ${registerPayload.lastName}`,
+        country: registerPayload.country,
+        role: UserRole.CANDIDATE,
+        is_verified: false,
+        onboardingComplete: false,
+      },
     });
   });
 });
