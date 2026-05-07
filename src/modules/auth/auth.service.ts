@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
+import { randomUUID } from 'crypto';
 import type { StringValue } from 'ms';
 import { env } from '../../config/env';
 import { User } from '../users/entities/user.entity';
@@ -132,21 +133,27 @@ export class AuthService {
   }
 
   private async signTokens(user: User, message: string): Promise<AuthTokens> {
-    const payload: JwtPayload = {
+    const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
       onboardingComplete: user.onboarding_complete,
     };
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, {
-        secret: env.JWT_ACCESS_SECRET,
-        expiresIn: env.JWT_ACCESS_EXPIRES_IN as StringValue,
-      }),
-      this.jwtService.signAsync(payload, {
-        secret: env.JWT_REFRESH_SECRET,
-        expiresIn: env.JWT_REFRESH_EXPIRES_IN as StringValue,
-      }),
+      this.jwtService.signAsync(
+        { ...payload, jti: randomUUID() } satisfies JwtPayload,
+        {
+          secret: env.JWT_ACCESS_SECRET,
+          expiresIn: env.JWT_ACCESS_EXPIRES_IN as StringValue,
+        },
+      ),
+      this.jwtService.signAsync(
+        { ...payload, jti: randomUUID() } satisfies JwtPayload,
+        {
+          secret: env.JWT_REFRESH_SECRET,
+          expiresIn: env.JWT_REFRESH_EXPIRES_IN as StringValue,
+        },
+      ),
     ]);
     return {
       message,
