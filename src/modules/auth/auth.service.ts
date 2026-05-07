@@ -98,12 +98,40 @@ export class AuthService {
     if (!matches) throw new UnauthorizedException('Invalid refresh token');
 
     const tokens = await this.signTokens(user, 'Token refreshed successfully');
-    await this.persistRefreshToken(user.id, tokens.refreshToken);
+    const nextHash = await argon2.hash(tokens.refreshToken);
+    const rotated = await this.usersService.rotateRefreshTokenHash(
+      user.id,
+      user.refreshTokenHash,
+      nextHash,
+    );
+    if (!rotated) throw new UnauthorizedException('Invalid refresh token');
+
     return tokens;
   }
 
   async logout(userId: string): Promise<void> {
     await this.usersService.setRefreshTokenHash(userId, null);
+  }
+
+  async logoutByRefreshToken(refreshToken: string | undefined): Promise<void> {
+    if (!refreshToken) return;
+
+    let payload: JwtPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
+        secret: env.JWT_REFRESH_SECRET,
+      });
+    } catch {
+      return;
+    }
+
+    const user = await this.usersService.findOneOrNull(payload.sub);
+    if (!user?.refreshTokenHash) return;
+
+    const matches = await argon2.verify(user.refreshTokenHash, refreshToken);
+    if (!matches) return;
+
+    await this.usersService.setRefreshTokenHash(user.id, null);
   }
 
   async getProfile(userId: string): Promise<AuthUser> {
@@ -141,14 +169,14 @@ export class AuthService {
     };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(
-        { ...payload, jti: randomUUID() } satisfies JwtPayload,
+        { ...payload, jti: randomUUID() },
         {
           secret: env.JWT_ACCESS_SECRET,
           expiresIn: env.JWT_ACCESS_EXPIRES_IN as StringValue,
         },
       ),
       this.jwtService.signAsync(
-        { ...payload, jti: randomUUID() } satisfies JwtPayload,
+        { ...payload, jti: randomUUID() },
         {
           secret: env.JWT_REFRESH_SECRET,
           expiresIn: env.JWT_REFRESH_EXPIRES_IN as StringValue,

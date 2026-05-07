@@ -10,8 +10,6 @@ export default defineConfig(
     'coverage/**',
     'node_modules/**',
     'eslint.config.mjs',
-    '**/*.spec.ts',
-    '**/*.e2e-spec.ts',
   ]),
   eslint.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
@@ -35,6 +33,16 @@ export default defineConfig(
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+    },
+  },
+  {
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts'],
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/require-await': 'off',
     },
   },
 );

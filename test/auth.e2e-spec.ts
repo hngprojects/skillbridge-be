@@ -102,6 +102,20 @@ class InMemoryUsersService {
     const user = this.usersById.get(id);
     if (user) user.refreshTokenHash = hash;
   }
+
+  rotateRefreshTokenHash(
+    id: string,
+    currentHash: string,
+    nextHash: string,
+  ): Promise<boolean> {
+    const user = this.usersById.get(id);
+    if (!user || user.refreshTokenHash !== currentHash) {
+      return Promise.resolve(false);
+    }
+
+    user.refreshTokenHash = nextHash;
+    return Promise.resolve(true);
+  }
 }
 
 const getSetCookies = (response: Response): string[] => {
@@ -233,11 +247,14 @@ describe('Auth (e2e)', () => {
       .post('/auth/login')
       .send(loginPayload)
       .expect(200);
-    const authCookieHeader = expectAuthCookies(loginResponse);
+    const loginCookies = getSetCookies(loginResponse);
+    const refreshCookieHeader = cookiePair(
+      findCookie(loginCookies, REFRESH_TOKEN_COOKIE),
+    );
 
     const response = await request(app.getHttpServer())
       .post('/auth/logout')
-      .set('Cookie', authCookieHeader)
+      .set('Cookie', refreshCookieHeader)
       .expect(200);
 
     const cookies = getSetCookies(response);
@@ -252,6 +269,11 @@ describe('Auth (e2e)', () => {
       message: 'Logged out',
       status: 'success',
     });
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', refreshCookieHeader)
+      .expect(401);
   });
 
   it('POST /auth/refresh rotates refresh cookies and rejects the previous refresh token', async () => {
@@ -300,6 +322,20 @@ describe('Auth (e2e)', () => {
       .post('/auth/refresh')
       .set('Cookie', refreshCookieHeader)
       .expect(200);
+  });
+
+  it('POST /auth/refresh treats malformed cookie values as missing', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', `${REFRESH_TOKEN_COOKIE}=%E0%A4%A`)
+      .expect(401)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          success: false,
+          status_code: 401,
+          message: 'Invalid refresh token',
+        });
+      });
   });
 
   it('GET /auth/me reads the access token from the httpOnly cookie', async () => {
