@@ -13,7 +13,6 @@ export interface JwtPayload {
   email: string;
   role: UserRole;
   onboardingComplete: boolean;
-  jti: string;
 }
 
 const cookieExtractor = (request: Request): string | null =>

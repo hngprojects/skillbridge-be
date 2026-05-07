@@ -26,8 +26,7 @@ export class AlignUsersWithAuthContract1777480000000 implements MigrationInterfa
         name: 'country',
         type: 'varchar',
         length: '100',
-        default: `'Unknown'`,
-        isNullable: false,
+        isNullable: true,
       }),
       new TableColumn({
         name: 'is_verified',
@@ -42,6 +41,12 @@ export class AlignUsersWithAuthContract1777480000000 implements MigrationInterfa
         isNullable: false,
       }),
     ]);
+    await queryRunner.query(
+      `UPDATE "users" SET "country" = 'Unknown' WHERE "country" IS NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "users" ALTER COLUMN "country" SET NOT NULL`,
+    );
 
     await queryRunner.query(
       `ALTER TABLE "users" ALTER COLUMN "role" SET DEFAULT 'candidate'`,

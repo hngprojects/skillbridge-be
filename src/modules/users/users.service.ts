@@ -105,4 +105,16 @@ export class UsersService {
       updatePayload: { refreshTokenHash: hash },
     });
   }
+
+  rotateRefreshTokenHash(
+    id: string,
+    currentHash: string,
+    nextHash: string,
+  ): Promise<boolean> {
+    return this.userModelAction.rotateRefreshTokenHash(
+      id,
+      currentHash,
+      nextHash,
+    );
+  }
 }

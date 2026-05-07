@@ -8,7 +8,11 @@ const DURATION_PATTERN = /^(\d+)(ms|s|m|h|d)$/;
 
 export const parseDurationToMs = (duration: string): number => {
   const match = DURATION_PATTERN.exec(duration.trim());
-  if (!match) return 0;
+  if (!match) {
+    throw new Error(
+      `Invalid duration "${duration}". Use a value like 15m, 7d, 30s, or 1000ms.`,
+    );
+  }
 
   const amount = Number(match[1]);
   const unit = match[2];
@@ -65,5 +69,11 @@ export const readCookie = (
   if (!cookie) return undefined;
 
   const value = cookie.slice(cookieName.length + 1);
-  return value ? decodeURIComponent(value) : undefined;
+  if (!value) return undefined;
+
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
 };

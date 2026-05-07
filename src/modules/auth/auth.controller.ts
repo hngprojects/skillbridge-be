@@ -72,14 +72,16 @@ export class AuthController {
   }
 
   @ApiCookieAuth()
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Revoke the current refresh token' })
   async logout(
-    @CurrentUser('sub') userId: string,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    await this.authService.logout(userId);
+    const refreshToken = readCookie(request, REFRESH_TOKEN_COOKIE);
+    await this.authService.logoutByRefreshToken(refreshToken);
     clearAuthCookies(response);
     return {
       message: 'Logged out',
