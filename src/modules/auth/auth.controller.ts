@@ -30,15 +30,15 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user' })
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const session = await this.authService.register(dto);
-    setAuthCookies(response, session);
-    return this.authService.toResponse(session);
+    const result = await this.authService.register(dto);
+    setAuthCookies(response, result.tokens);
+    return this.authService.toResponse(result);
   }
 
   @Public()
@@ -49,9 +49,9 @@ export class AuthController {
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const session = await this.authService.login(dto);
-    setAuthCookies(response, session);
-    return this.authService.toResponse(session);
+    const result = await this.authService.login(dto);
+    setAuthCookies(response, result.tokens);
+    return this.authService.toResponse(result);
   }
 
   @Public()
@@ -63,15 +63,14 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const refreshToken = readCookie(request, REFRESH_TOKEN_COOKIE);
-    const tokens = await this.authService.refresh(refreshToken);
-    setAuthCookies(response, tokens);
+    const result = await this.authService.refresh(refreshToken);
+    setAuthCookies(response, result.tokens);
     return {
-      message: tokens.message,
+      message: result.message,
       status: 'success',
     };
   }
 
-  @ApiCookieAuth()
   @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)

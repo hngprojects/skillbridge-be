@@ -61,7 +61,7 @@ export class AlignUsersWithAuthContract1777480000000 implements MigrationInterfa
       `ALTER TABLE "users" ALTER COLUMN "role" TYPE varchar(20) USING "role"::text`,
     );
     await queryRunner.query(
-      `UPDATE "users" SET "role" = 'user' WHERE "role" IN ('candidate', 'employer')`,
+      `UPDATE "users" SET "role" = 'user' WHERE "role" <> 'admin'`,
     );
     await queryRunner.query(`DROP TYPE "users_role_enum"`);
     await queryRunner.query(

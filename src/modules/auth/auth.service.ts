@@ -30,16 +30,22 @@ export interface AuthUser {
 }
 
 export interface AuthTokens {
-  message: string;
   accessToken: string;
   refreshToken: string;
 }
 
-export interface AuthSession extends AuthTokens {
+export interface AuthSession {
+  message: string;
   data: {
     user: AuthUser;
     organisations: Organisation[];
   };
+}
+
+export interface AuthResult {
+  message: string;
+  data: AuthSession['data'];
+  tokens: AuthTokens;
 }
 
 export interface AuthResponse {
@@ -55,7 +61,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async register(dto: RegisterDto): Promise<AuthSession> {
+  async register(dto: RegisterDto): Promise<AuthResult> {
     const user = await this.usersService.create({
       email: dto.email,
       password: dto.password,
@@ -67,7 +73,7 @@ export class AuthService {
     return this.issueTokens(user, 'User created successfully');
   }
 
-  async login(dto: LoginDto): Promise<AuthSession> {
+  async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
@@ -77,7 +83,9 @@ export class AuthService {
     return this.issueTokens(user, 'Login successful');
   }
 
-  async refresh(refreshToken: string | undefined): Promise<AuthTokens> {
+  async refresh(
+    refreshToken: string | undefined,
+  ): Promise<{ message: string; tokens: AuthTokens }> {
     if (!refreshToken) throw new UnauthorizedException('Invalid refresh token');
 
     let payload: JwtPayload;
@@ -97,7 +105,7 @@ export class AuthService {
     const matches = await argon2.verify(user.refreshTokenHash, refreshToken);
     if (!matches) throw new UnauthorizedException('Invalid refresh token');
 
-    const tokens = await this.signTokens(user, 'Token refreshed successfully');
+    const tokens = await this.signTokens(user);
     const nextHash = await argon2.hash(tokens.refreshToken);
     const rotated = await this.usersService.rotateRefreshTokenHash(
       user.id,
@@ -106,7 +114,10 @@ export class AuthService {
     );
     if (!rotated) throw new UnauthorizedException('Invalid refresh token');
 
-    return tokens;
+    return {
+      message: 'Token refreshed successfully',
+      tokens,
+    };
   }
 
   async logout(userId: string): Promise<void> {
@@ -147,20 +158,21 @@ export class AuthService {
     };
   }
 
-  private async issueTokens(user: User, message: string): Promise<AuthSession> {
-    const tokens = await this.signTokens(user, message);
+  private async issueTokens(user: User, message: string): Promise<AuthResult> {
+    const tokens = await this.signTokens(user);
     await this.persistRefreshToken(user.id, tokens.refreshToken);
 
     return {
-      ...tokens,
+      message,
       data: {
         user: this.toAuthUser(user),
         organisations: [],
       },
+      tokens,
     };
   }
 
-  private async signTokens(user: User, message: string): Promise<AuthTokens> {
+  private async signTokens(user: User): Promise<AuthTokens> {
     const payload = {
       sub: user.id,
       email: user.email,
@@ -184,7 +196,6 @@ export class AuthService {
       ),
     ]);
     return {
-      message,
       accessToken,
       refreshToken,
     };
