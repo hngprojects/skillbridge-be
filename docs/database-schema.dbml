@@ -1,0 +1,210 @@
+Table users {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar [not null]
+  email varchar [unique, not null]
+  password_hash varchar [not null]
+  role user_role [not null, note: 'talent | employer | admin']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table talent_profiles {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: - users.id, not null]
+  role_track varchar [not null, note: 'frontend | data | design | etc']
+  status talent_status [not null, default: 'in_progress', note: 'in_progress | not_ready | emerging | job_ready']
+  is_published boolean [default: false]
+  profile_share_link varchar [unique]
+  published_at timestamp
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table employer_profiles {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: - users.id, not null]
+  company_name varchar [not null]
+  company_size varchar
+  industry varchar
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table assessments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  attempt_number int [not null, default: 1]
+  status assessment_status [not null, default: 'in_progress', note: 'in_progress | completed | flagged']
+  tab_switch_flagged boolean [default: false]
+  started_at timestamp [default: `now()`]
+  completed_at timestamp
+}
+
+Table assessment_questions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  role_track varchar [not null]
+  question_text text [not null]
+  options jsonb [not null]
+  correct_answer varchar [not null]
+  difficulty int [default: 1, note: '1=easy 2=medium 3=hard']
+  created_at timestamp [default: `now()`]
+}
+
+Table assessment_responses {
+  id uuid [pk, default: `gen_random_uuid()`]
+  assessment_id uuid [ref: > assessments.id, not null]
+  question_id uuid [ref: > assessment_questions.id, not null]
+  candidate_answer varchar
+  is_correct boolean
+}
+
+Table task_submissions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  assessment_id uuid [ref: - assessments.id, not null]
+  file_url varchar
+  external_link varchar
+  submitted_at timestamp [default: `now()`]
+  status submission_status [not null, default: 'pending', note: 'pending | under_review | approved | rejected']
+  score int
+  reviewed_by uuid [ref: > users.id]
+  reviewed_at timestamp
+}
+
+Table interviews {
+  id uuid [pk, default: `gen_random_uuid()`]
+  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  assessment_id uuid [ref: - assessments.id, not null]
+  format interview_format [note: 'sync | live']
+  scheduled_at timestamp
+  completed_at timestamp
+  score int
+  reviewed_by uuid [ref: > users.id]
+  status interview_status [not null, default: 'scheduled', note: 'scheduled | completed | scored']
+}
+
+Table composite_scores {
+  id uuid [pk, default: `gen_random_uuid()`]
+  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  assessment_id uuid [ref: - assessments.id, not null]
+  technical_score float [note: 'weight: 40%']
+  task_score float [note: 'weight: 35%']
+  interview_score float [note: 'weight: 25%']
+  composite_score float [not null]
+  tier score_tier [not null, note: 'not_ready(0-49) | emerging(50-74) | job_ready(75-100)']
+  calculated_at timestamp [default: `now()`]
+}
+
+Table ai_guidance {
+  id uuid [pk, default: `gen_random_uuid()`]
+  composite_score_id uuid [ref: - composite_scores.id, not null]
+  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  performance_gaps jsonb
+  generated_at timestamp [default: `now()`]
+}
+
+Table resources {
+  id uuid [pk, default: `gen_random_uuid()`]
+  ai_guidance_id uuid [ref: > ai_guidance.id, not null]
+  title varchar [not null]
+  url varchar [not null]
+  description text
+  pricing resource_pricing [note: 'free | freemium | paid']
+  estimated_hours int
+  role_track varchar [not null]
+}
+
+Table checklist_items {
+  id uuid [pk, default: `gen_random_uuid()`]
+  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  resource_id uuid [ref: > resources.id, not null]
+  is_completed boolean [default: false]
+  completed_at timestamp
+}
+
+Table retake_windows {
+  id uuid [pk, default: `gen_random_uuid()`]
+  talent_profile_id uuid [ref: - talent_profiles.id, not null]
+  last_attempt_at timestamp [not null]
+  eligible_retake_at timestamp [not null, note: 'last_attempt_at + 14 days']
+  is_eligible boolean [default: false]
+}
+
+Table employer_contacts {
+  id uuid [pk, default: `gen_random_uuid()`]
+  employer_profile_id uuid [ref: > employer_profiles.id, not null]
+  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  initiated_at timestamp [default: `now()`]
+  status contact_status [not null, default: 'pending', note: 'pending | accepted | declined']
+}
+
+Table shortlists {
+  id uuid [pk, default: `gen_random_uuid()`]
+  employer_profile_id uuid [ref: > employer_profiles.id, not null]
+  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  saved_at timestamp [default: `now()`]
+}
+
+Table notifications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: > users.id, not null]
+  type varchar [not null]
+  message text [not null]
+  is_read boolean [default: false]
+  created_at timestamp [default: `now()`]
+}
+
+Enum user_role {
+  talent
+  employer
+  admin
+}
+
+Enum talent_status {
+  in_progress
+  not_ready
+  emerging
+  job_ready
+}
+
+Enum assessment_status {
+  in_progress
+  completed
+  flagged
+}
+
+Enum submission_status {
+  pending
+  under_review
+  approved
+  rejected
+}
+
+Enum interview_format {
+  sync
+  live
+}
+
+Enum interview_status {
+  scheduled
+  completed
+  scored
+}
+
+Enum score_tier {
+  not_ready
+  emerging
+  job_ready
+}
+
+Enum resource_pricing {
+  free
+  freemium
+  paid
+}
+
+Enum contact_status {
+  pending
+  accepted
+  declined
+}
