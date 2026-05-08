@@ -1,11 +1,18 @@
 Table users {
-  id uuid [pk, default: `gen_random_uuid()`]
-  name varchar [not null]
-  email varchar [unique, not null]
-  password_hash varchar [not null]
-  role user_role [not null, note: 'talent | employer | admin']
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk, default: `uuid_generate_v4()`]
+  email varchar(255) [unique, not null]
+  password varchar(255) [not null]
+  first_name varchar(255) [not null]
+  last_name varchar(255) [not null]
+  avatar_url varchar(500)
+  country varchar(100) [not null]
+  role user_role [not null, default: 'candidate', note: 'candidate | employer | admin']
+  refresh_token_hash varchar(500)
+  is_verified boolean [not null, default: false]
+  onboarding_complete boolean [not null, default: false]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+  deleted_at timestamp
 }
 
 Table talent_profiles {
@@ -155,7 +162,7 @@ Table notifications {
 }
 
 Enum user_role {
-  talent
+  candidate
   employer
   admin
 }
