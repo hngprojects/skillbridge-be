@@ -1,5 +1,5 @@
 Table users {
-  id uuid [pk, default: `uuid_generate_v4()`]
+  id uuid [pk, default: `gen_random_uuid()`]
   email varchar(255) [unique, not null]
   password varchar(255) [not null]
   first_name varchar(255) [not null]

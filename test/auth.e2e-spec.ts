@@ -182,11 +182,11 @@ describe('Auth (e2e)', () => {
     const response = await request(app.getHttpServer())
       .post('/auth/register')
       .send(registerPayload)
-      .expect(200);
+      .expect(201);
 
     expectAuthCookies(response);
     expect(response.body).toMatchObject({
-      status_code: 200,
+      status_code: 201,
       message: 'User created successfully',
       status: 'success',
       data: {
@@ -212,7 +212,7 @@ describe('Auth (e2e)', () => {
     await request(app.getHttpServer())
       .post('/auth/register')
       .send(registerPayload)
-      .expect(200);
+      .expect(201);
 
     const response = await request(app.getHttpServer())
       .post('/auth/login')
@@ -241,7 +241,7 @@ describe('Auth (e2e)', () => {
     await request(app.getHttpServer())
       .post('/auth/register')
       .send(registerPayload)
-      .expect(200);
+      .expect(201);
 
     const loginResponse = await request(app.getHttpServer())
       .post('/auth/login')
@@ -280,7 +280,7 @@ describe('Auth (e2e)', () => {
     await request(app.getHttpServer())
       .post('/auth/register')
       .send(registerPayload)
-      .expect(200);
+      .expect(201);
 
     const loginResponse = await request(app.getHttpServer())
       .post('/auth/login')
@@ -342,7 +342,7 @@ describe('Auth (e2e)', () => {
     await request(app.getHttpServer())
       .post('/auth/register')
       .send(registerPayload)
-      .expect(200);
+      .expect(201);
 
     const loginResponse = await request(app.getHttpServer())
       .post('/auth/login')
