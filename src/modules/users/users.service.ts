@@ -10,6 +10,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User, UserRole } from './entities/user.entity';
+import { OAuthUserModelAction } from './actions/user-oauth.action';
+import { OAuthUser } from './entities/user-oauth.entity';
 
 const NO_TRANSACTION = {
   transactionOptions: { useTransaction: false as const },
@@ -17,7 +19,10 @@ const NO_TRANSACTION = {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly userModelAction: UserModelAction) {}
+  constructor(
+    private readonly userModelAction: UserModelAction,
+    private readonly oauthUserModelAction: OAuthUserModelAction,
+  ) {}
 
   async create(dto: CreateUserDto): Promise<User> {
     const existing = await this.userModelAction.findByEmail(dto.email);
@@ -66,6 +71,14 @@ export class UsersService {
   findByEmail(email: string): Promise<User | null> {
     return this.userModelAction.findByEmail(email);
   }
+
+  findOAuthAccount(provider: string, provider_id: string) {
+    return this.oauthUserModelAction.findOAuthUser(provider, provider_id);
+  }
+
+  createOAuthAccount() {}
+
+  createOAuthUser() {}
 
   async update(id: string, dto: UpdateUserDto): Promise<User> {
     await this.findOne(id);

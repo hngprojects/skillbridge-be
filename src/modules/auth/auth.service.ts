@@ -83,6 +83,19 @@ export class AuthService {
     return this.issueTokens(user, 'Login successful');
   }
 
+  googleLogin(req) {
+    if (!req.user) {
+      return 'No user from google';
+    }
+
+    return {
+      message: 'User information from google',
+      user: req.user,
+    };
+  }
+
+  googleCallback(): Promise<AuthResult> {}
+
   async refresh(
     refreshToken: string | undefined,
   ): Promise<{ message: string; tokens: AuthTokens }> {
