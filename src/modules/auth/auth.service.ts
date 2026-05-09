@@ -330,7 +330,7 @@ export class AuthService {
     const clientIdRaw = env.LINKEDIN_CLIENT_ID;
     const redirectUriRaw = env.LINKEDIN_REDIRECT_URI;
     if (!clientIdRaw || !redirectUriRaw) {
-      throw new ServiceUnavailableException(
+      throw new BadRequestException(
         'LinkedIn OAuth is not configured',
       );
     }
@@ -381,19 +381,22 @@ export class AuthService {
       });
       clearLinkedInOAuthStateCookie(response);
       setAuthCookies(response, result.tokens);
-      response
-        .status(HttpStatus.OK)
-        .json(
-          this.toResponse({
-            message: result.message,
-            data: result.data,
-          }),
-        );
+      response.redirect(
+        HttpStatus.FOUND,
+        `${this.getFrontendOrigin()}${this.getPostLoginRedirectPath(result.data.user)}`,
+      );
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : JSON.stringify(error);
       this.logger.warn(`LinkedIn OAuth callback failed: ${message}`);
-      redirectWithError('oauth_failed');
+
+      const key =
+        error instanceof BadRequestException &&
+        error.message === 'Invalid OAuth state'
+          ? 'oauth_state_mismatch'
+          : 'oauth_failed';
+
+      redirectWithError(key);
     }
   }
 
@@ -427,6 +430,23 @@ export class AuthService {
 
   getFrontendOrigin(): string {
     return env.CORS_ORIGIN.split(',')[0]?.trim() || 'http://localhost:3000';
+  }
+
+  /** Post-login Redirect Logic (auth-module-specification.md) — used for LinkedIn callback success. */
+  private getPostLoginRedirectPath(user: AuthUser): string {
+    if (!user.onboardingComplete) {
+      return '/onboarding/role-select';
+    }
+    switch (user.role) {
+      case UserRole.CANDIDATE:
+        return '/dashboard';
+      case UserRole.EMPLOYER:
+        return '/discovery';
+      case UserRole.ADMIN:
+        return '/admin';
+      default:
+        return '/onboarding/role-select';
+    }
   }
 
   private async linkedInFetch(
