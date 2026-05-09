@@ -7,18 +7,23 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
-import { randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import type { StringValue } from 'ms';
+import { Repository } from 'typeorm';
 import { env } from '../../config/env';
+import { parseDurationToMs } from '../../config/duration';
 import { MailService } from '../mail/mail.service';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { VerificationOtpSource } from './entities/verification-otp.entity';
+import { PasswordResetToken } from './entities/password-reset-token.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
 
@@ -72,12 +77,27 @@ export interface VerifyEmailResult {
   tokens: AuthTokens;
 }
 
+export const FORGOT_PASSWORD_SUCCESS_MESSAGE =
+  'If that email exists, a reset link has been sent';
+
+export interface ForgotPasswordResponse {
+  status: 'success';
+  message: string;
+}
+
+interface IssuedPasswordResetToken {
+  token: string;
+  expiresAt: Date;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly verificationOtpService: VerificationOtpService,
+    @InjectRepository(PasswordResetToken)
+    private readonly passwordResetTokenRepository: Repository<PasswordResetToken>,
     private readonly mailService: MailService,
   ) {}
 
@@ -186,6 +206,29 @@ export class AuthService {
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     return this.issueTokens(user, 'Login successful');
+  }
+
+  async forgotPassword(
+    dto: ForgotPasswordDto,
+  ): Promise<ForgotPasswordResponse> {
+    const email = dto.email.trim();
+    const user = await this.usersService.findByEmail(email);
+
+    if (user) {
+      const issued = await this.issuePasswordResetToken(user.id);
+      const resetLink = this.buildPasswordResetLink(issued.token);
+      await this.mailService.sendPasswordReset({
+        to: user.email,
+        token: issued.token,
+        expiresAt: issued.expiresAt,
+        ...(resetLink ? { resetLink } : {}),
+      });
+    }
+
+    return {
+      status: 'success',
+      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+    };
   }
 
   async refresh(
@@ -312,6 +355,56 @@ export class AuthService {
   ): Promise<void> {
     const hash = await argon2.hash(refreshToken);
     await this.usersService.setRefreshTokenHash(userId, hash);
+  }
+
+  private buildPasswordResetLink(token: string): string | undefined {
+    const base = env.PASSWORD_RESET_WEB_BASE_URL;
+    if (!base?.trim()) {
+      return undefined;
+    }
+    const trimmed = base.replace(/\/$/, '');
+    const sep = trimmed.includes('?') ? '&' : '?';
+    return `${trimmed}${sep}token=${encodeURIComponent(token)}`;
+  }
+
+  private async issuePasswordResetToken(
+    userId: string,
+  ): Promise<IssuedPasswordResetToken> {
+    await this.invalidateActivePasswordResetTokensForUser(userId);
+
+    const token = randomBytes(32).toString('base64url');
+    const tokenLookupHash = this.passwordResetLookupHash(token);
+    const expiresAt = new Date(
+      Date.now() + parseDurationToMs(env.PASSWORD_RESET_EXPIRES_IN),
+    );
+
+    const row = this.passwordResetTokenRepository.create({
+      userId,
+      tokenLookupHash,
+      tokenHash: await argon2.hash(token),
+      expiresAt,
+      usedAt: null,
+    });
+    await this.passwordResetTokenRepository.save(row);
+
+    return { token, expiresAt };
+  }
+
+  private passwordResetLookupHash(token: string): string {
+    return createHash('sha256').update(token, 'utf8').digest('hex');
+  }
+
+  private async invalidateActivePasswordResetTokensForUser(
+    userId: string,
+  ): Promise<void> {
+    await this.passwordResetTokenRepository
+      .createQueryBuilder()
+      .update(PasswordResetToken)
+      .set({ usedAt: () => 'CURRENT_TIMESTAMP' })
+      .where('user_id = :userId', { userId })
+      .andWhere('used_at IS NULL')
+      .andWhere('expires_at > NOW()')
+      .execute();
   }
 
   private toAuthUser(user: User): AuthUser {

@@ -50,6 +50,9 @@ export const env = createEnv({
       .positive()
       .default(3),
 
+    PASSWORD_RESET_EXPIRES_IN: durationString('1h'),
+    PASSWORD_RESET_WEB_BASE_URL: z.string().url().optional(),
+
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
     SWAGGER_ENABLED: booleanString.default(true),
     RESEND_API_KEY: z.string().min(1),

@@ -35,6 +35,35 @@ export class MailService {
     return data;
   }
 
+  async sendPasswordReset(params: {
+    to: string;
+    token: string;
+    expiresAt: Date;
+    resetLink?: string;
+  }) {
+    const expiresInMinutes = Math.max(
+      1,
+      Math.ceil((params.expiresAt.getTime() - Date.now()) / (60 * 1000)),
+    );
+
+    const linkLine = params.resetLink
+      ? `Open this link to reset your password (expires in ${expiresInMinutes} minute(s).):\n${params.resetLink}\n\n`
+      : '';
+
+    const text = `${linkLine}\n\nThis token expires in ${expiresInMinutes} minute(s). If you did not request a reset, ignore this email.`;
+
+    const linkHtml = params.resetLink
+      ? `<p><a href="${params.resetLink}">Reset your password</a> (expires in ${expiresInMinutes} minute(s).)</p>`
+      : '';
+
+    return this.send({
+      to: params.to,
+      subject: 'Reset your SkillBridge password',
+      text,
+      html: `${linkHtml}<p>It expires in ${expiresInMinutes} minute(s). If you did not request a reset, ignore this email.</p>`,
+    });
+  }
+
   async sendVerificationOtp(params: {
     to: string;
     otp: string;
