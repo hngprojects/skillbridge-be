@@ -14,7 +14,6 @@ import { env } from '../../config/env';
 import { MailService } from '../mail/mail.service';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
-import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
@@ -142,9 +141,7 @@ export class AuthService {
 
     const verifiedUser: User = user.is_verified
       ? user
-      : await this.usersService.update(user.id, {
-          is_verified: true,
-        } as UpdateUserDto);
+      : await this.usersService.markVerified(user.id);
     const tokens = await this.signTokens(verifiedUser);
     await this.persistRefreshToken(verifiedUser.id, tokens.refreshToken);
 
@@ -232,7 +229,13 @@ export class AuthService {
         'google',
         providerId,
       );
-      return this.issueTokens(existingUser, 'Login successful');
+
+      // Mark user as verified when linking OAuth (OAuth providers verify email)
+      const verifiedUser = existingUser.is_verified
+        ? existingUser
+        : await this.usersService.markVerified(existingUser.id);
+
+      return this.issueTokens(verifiedUser, 'Login successful');
     }
 
     // Case 3: Completely new user → create account and link OAuth atomically

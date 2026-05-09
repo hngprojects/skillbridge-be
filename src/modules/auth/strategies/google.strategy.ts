@@ -9,7 +9,7 @@ export interface GoogleProfile {
   lastName: string;
   picture: string;
   providerId: string;
-  country: 'Unknown';
+  country: string;
 }
 
 @Injectable()
@@ -30,13 +30,29 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     done: VerifyCallback,
   ): void {
     const { name, emails, photos } = profile;
+
+    // Validate required fields to prevent runtime crashes
+    if (!emails || emails.length === 0) {
+      return done(
+        new Error('No email provided by Google OAuth profile'),
+        undefined,
+      );
+    }
+
+    if (!name?.givenName || !name?.familyName) {
+      return done(
+        new Error('Name information missing from Google OAuth profile'),
+        undefined,
+      );
+    }
+
     const user: GoogleProfile = {
-      email: emails![0].value,
-      firstName: name!.givenName,
-      lastName: name!.familyName,
-      picture: photos![0].value,
+      email: emails[0].value,
+      firstName: name.givenName,
+      lastName: name.familyName,
+      picture: photos?.[0]?.value ?? '',
       providerId: profile.id,
-      country: 'Unknown',
+      country: env.GOOGLE_DEFAULT_COUNTRY ?? 'Unknown',
     };
     done(null, user);
   }

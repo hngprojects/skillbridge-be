@@ -79,12 +79,46 @@ export class UsersService {
     return this.oauthUserModelAction.findOAuthUser(provider, provider_id);
   }
 
-  createOAuthAccount(userId: string, provider: string, provider_id: string) {
-    return this.oauthUserModelAction.insertOAuthUser(
-      userId,
-      provider,
-      provider_id,
-    );
+  async createOAuthAccount(
+    userId: string,
+    provider: string,
+    provider_id: string,
+  ): Promise<OAuthUser> {
+    try {
+      await this.oauthUserModelAction.insertOAuthUser(
+        userId,
+        provider,
+        provider_id,
+      );
+
+      // Fetch the created entity
+      const oauthUser = await this.oauthUserModelAction.findOAuthUser(
+        provider,
+        provider_id,
+      );
+
+      if (!oauthUser) {
+        throw new Error('Failed to retrieve created OAuth account');
+      }
+
+      return oauthUser;
+    } catch (err) {
+      // Handle unique constraint violation (concurrent insert)
+      if (
+        err instanceof QueryFailedError &&
+        'code' in err &&
+        err.code === '23505'
+      ) {
+        const existing = await this.oauthUserModelAction.findOAuthUser(
+          provider,
+          provider_id,
+        );
+        if (existing) {
+          return existing;
+        }
+      }
+      throw err;
+    }
   }
 
   /**
@@ -139,7 +173,11 @@ export class UsersService {
     } catch (err) {
       // PostgreSQL unique-violation code 23505: a concurrent request already
       // created these rows. Re-query and return the winner's result.
-      if (err instanceof QueryFailedError && (err as any).code === '23505') {
+      if (
+        err instanceof QueryFailedError &&
+        'code' in err &&
+        err.code === '23505'
+      ) {
         const oauthUser = await this.oauthUserModelAction.findOAuthUser(
           provider,
           provider_id,

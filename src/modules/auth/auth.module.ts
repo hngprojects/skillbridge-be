@@ -30,7 +30,6 @@ import { VerificationOtpService } from './verification-otp.service';
     JwtStrategy,
     GoogleStrategy,
     VerificationOtpService,
-    VerificationOtpService,
   ],
   exports: [AuthService],
 })
