@@ -33,6 +33,7 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { VerificationOtpSource } from './entities/verification-otp.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
+import { isAbortError, isRecord, LINKEDIN_ACCESS_TOKEN_URL, LINKEDIN_AUTHORIZATION_URL, LINKEDIN_OAUTH_SCOPES, LINKEDIN_USERINFO_URL, OAUTH_PROVIDER_LINKEDIN, parseLinkedInTokenResponse } from './linkedin-oauth.service';
 
 export interface Organisation {
   id: string;
@@ -91,42 +92,6 @@ export interface OAuthProfilePayload {
   firstName: string;
   lastName: string;
   avatarUrl: string | null;
-}
-
-export const OAUTH_PROVIDER_LINKEDIN = 'linkedin' as const;
-
-const LINKEDIN_AUTHORIZATION_URL =
-  'https://www.linkedin.com/oauth/v2/authorization';
-const LINKEDIN_ACCESS_TOKEN_URL =
-  'https://www.linkedin.com/oauth/v2/accessToken';
-const LINKEDIN_USERINFO_URL = 'https://api.linkedin.com/v2/userinfo';
-/** Sign In with LinkedIn using OpenID Connect (member data v2). */
-const LINKEDIN_OAUTH_SCOPES = 'openid profile email';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isAbortError(err: unknown): boolean {
-  return err instanceof Error && err.name === 'AbortError';
-}
-
-function parseLinkedInTokenResponse(body: unknown): {
-  access_token: string;
-  error?: string;
-  error_description?: string;
-} | null {
-  if (!isRecord(body)) return null;
-  const access_token = body.access_token;
-  if (typeof access_token !== 'string' || access_token.length === 0) {
-    return null;
-  }
-  const error = typeof body.error === 'string' ? body.error : undefined;
-  const error_description =
-    typeof body.error_description === 'string'
-      ? body.error_description
-      : undefined;
-  return { access_token, error, error_description };
 }
 
 @Injectable()
@@ -330,7 +295,7 @@ export class AuthService {
     const clientIdRaw = env.LINKEDIN_CLIENT_ID;
     const redirectUriRaw = env.LINKEDIN_REDIRECT_URI;
     if (!clientIdRaw || !redirectUriRaw) {
-      throw new BadRequestException(
+      throw new ServiceUnavailableException(
         'LinkedIn OAuth is not configured',
       );
     }
@@ -505,7 +470,7 @@ export class AuthService {
         }
         received += chunk.byteLength;
         if (received > maxBytes) {
-          await reader.cancel('Response body too large');
+          //await reader.cancel('Response body too large');
           throw new PayloadTooLargeException('LinkedIn response body too large');
         }
         out += decoder.decode(chunk, { stream: true });
