@@ -61,6 +61,7 @@ export const env = createEnv({
     GOOGLE_CLIENT_ID: z.string().min(1),
     GOOGLE_CLIENT_SECRET: z.string().min(1),
     GOOGLE_CALLBACK_URL: z.string().min(1),
+    GOOGLE_DEFAULT_COUNTRY: z.string().default('Unknown'),
 
     FRONTEND_URL: z.string().default('http://localhost:5173'),
   },

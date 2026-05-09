@@ -27,11 +27,12 @@ export class OAuthUserModelAction extends AbstractModelAction<OAuthUser> {
     user_id: string,
     provider: string,
     provider_id: string,
-  ) {
-    return this.repository.insert({
+  ): Promise<OAuthUser> {
+    const oauthUser = this.repository.create({
       user_id,
       provider,
       provider_id,
     });
+    return this.repository.save(oauthUser);
   }
 }
