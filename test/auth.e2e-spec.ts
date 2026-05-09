@@ -222,6 +222,28 @@ class InMemoryUsersService {
     });
     return { user, oauthUser };
   }
+
+  async findOrCreateAndLinkOAuthUser(
+    provider: string,
+    provider_id: string,
+    first_name: string,
+    last_name: string,
+    email: string,
+    country: string,
+    avatar_url?: string | null,
+  ): Promise<{ user: User; oauthUser: OAuthUser }> {
+    // In test environment, we can simply delegate to createOAuthUser
+    // since we don't need to handle concurrent requests
+    return this.createOAuthUser(
+      provider,
+      provider_id,
+      first_name,
+      last_name,
+      email,
+      country as 'Unknown',
+      avatar_url,
+    );
+  }
 }
 
 class InMemoryVerificationOtpService {
