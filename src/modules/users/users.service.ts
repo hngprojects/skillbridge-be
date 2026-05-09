@@ -76,9 +76,51 @@ export class UsersService {
     return this.oauthUserModelAction.findOAuthUser(provider, provider_id);
   }
 
-  createOAuthAccount() {}
+  createOAuthAccount(userId: string, provider: string, provider_id: string) {
+    return this.oauthUserModelAction.insertOAuthUser(
+      userId,
+      provider,
+      provider_id,
+    );
+  }
 
-  createOAuthUser() {}
+  async createOAuthUser(
+    provider: string,
+    provider_id: string,
+    first_name: string,
+    last_name: string,
+    email: string,
+    country: 'Unknown',
+    avatar_url?: string | null,
+  ): Promise<{ user: User; oauthUser: OAuthUser }> {
+    const user = await this.userModelAction.create({
+      ...NO_TRANSACTION,
+      createPayload: {
+        first_name,
+        last_name,
+        email,
+        password: null,
+        is_verified: true,
+        onboarding_complete: false,
+        role: UserRole.CANDIDATE,
+        avatar_url,
+        country,
+      },
+    });
+
+    await this.oauthUserModelAction.insertOAuthUser(
+      user.id,
+      provider,
+      provider_id,
+    );
+
+    const oauthUser = await this.oauthUserModelAction.findOAuthUser(
+      provider,
+      provider_id,
+    );
+
+    return { user, oauthUser: oauthUser! };
+  }
 
   async update(id: string, dto: UpdateUserDto): Promise<User> {
     await this.findOne(id);
@@ -119,8 +161,6 @@ export class UsersService {
     });
   }
 
-<<<<<<< HEAD
-=======
   async markVerified(id: string): Promise<User> {
     await this.userModelAction.update({
       ...NO_TRANSACTION,
@@ -130,7 +170,6 @@ export class UsersService {
     return this.findOne(id);
   }
 
->>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   rotateRefreshTokenHash(
     id: string,
     currentHash: string,
