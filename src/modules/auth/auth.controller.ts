@@ -7,6 +7,7 @@ import {
   Post,
   Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -22,6 +23,7 @@ import {
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { GoogleOAuthGuard } from './guards/google-auth.guard';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -52,6 +54,20 @@ export class AuthController {
     const result = await this.authService.login(dto);
     setAuthCookies(response, result.tokens);
     return this.authService.toResponse(result);
+  }
+
+  @Public()
+  @Get('google')
+  @UseGuards(GoogleOAuthGuard)
+  async googleAuth() {}
+
+  @Public()
+  @Get('google/callback')
+  @UseGuards(GoogleOAuthGuard)
+  async googleAuthRedirect(@Res({ passthrough: true }) response: Response) {
+    const authResult = await this.authService.googleCallback();
+    setAuthCookies(response, authResult.tokens);
+    return this.authService.toResponse(authResult);
   }
 
   @Public()
