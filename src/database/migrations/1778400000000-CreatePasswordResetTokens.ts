@@ -72,8 +72,8 @@ export class CreatePasswordResetTokens1778400000000 implements MigrationInterfac
     await queryRunner.createIndex(
       'password_reset_tokens',
       new TableIndex({
-        name: 'IDX_password_reset_tokens_user_created_at',
-        columnNames: ['user_id', 'created_at'],
+        name: 'IDX_password_reset_tokens_user_used_expires',
+        columnNames: ['user_id', 'used_at', 'expires_at'],
       }),
     );
   }
@@ -81,7 +81,7 @@ export class CreatePasswordResetTokens1778400000000 implements MigrationInterfac
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropIndex(
       'password_reset_tokens',
-      'IDX_password_reset_tokens_user_created_at',
+      'IDX_password_reset_tokens_user_used_expires',
     );
 
     const table = await queryRunner.getTable('password_reset_tokens');

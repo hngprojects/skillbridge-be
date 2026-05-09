@@ -7,6 +7,7 @@ import {
 import { JwtModule } from '@nestjs/jwt';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PassportModule } from '@nestjs/passport';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
@@ -20,7 +21,7 @@ import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
-import { AuthService } from '../src/modules/auth/auth.service';
+import { AuthService, FORGOT_PASSWORD_SUCCESS_MESSAGE } from '../src/modules/auth/auth.service';
 import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
 import { VerificationOtpSource } from '../src/modules/auth/entities/verification-otp.entity';
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
@@ -229,6 +230,13 @@ class MockMailService {
     expiresAt: Date;
   }> = [];
 
+  readonly passwordResetMessages: Array<{
+    to: string;
+    token: string;
+    expiresAt: Date;
+    resetLink?: string;
+  }> = [];
+
   async sendVerificationOtp(params: {
     to: string;
     otp: string;
@@ -236,6 +244,16 @@ class MockMailService {
   }) {
     this.verificationMessages.push(params);
     return { id: `mail-${this.verificationMessages.length}` };
+  }
+
+  async sendPasswordReset(params: {
+    to: string;
+    token: string;
+    expiresAt: Date;
+    resetLink?: string;
+  }) {
+    this.passwordResetMessages.push(params);
+    return { id: `reset-mail-${this.passwordResetMessages.length}` };
   }
 }
 
@@ -263,9 +281,11 @@ const expectAuthCookies = (response: Response): string => {
   return cookies.map(cookiePair).join('; ');
 };
 
+const mockPasswordResetSave = jest.fn().mockResolvedValue(undefined);
+
 const mockPasswordResetTokenRepository = {
   create: jest.fn((row: unknown) => row),
-  save: jest.fn().mockResolvedValue(undefined),
+  save: mockPasswordResetSave,
   findOne: jest.fn().mockResolvedValue(null),
   createQueryBuilder: jest.fn(() => ({
     update: jest.fn().mockReturnThis(),
@@ -274,6 +294,33 @@ const mockPasswordResetTokenRepository = {
     andWhere: jest.fn().mockReturnThis(),
     execute: jest.fn().mockResolvedValue({ affected: 0 }),
   })),
+  manager: {
+    transaction: jest.fn(async (fn: (m: {
+      createQueryBuilder: () => {
+        update: jest.Mock;
+        set: jest.Mock;
+        where: jest.Mock;
+        andWhere: jest.Mock;
+        execute: jest.Mock;
+      };
+      create: jest.Mock;
+      save: jest.Mock;
+    }) => Promise<void>) => {
+        const qb = {
+          update: jest.fn().mockReturnThis(),
+          set: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          execute: jest.fn().mockResolvedValue({ affected: 0 }),
+        };
+        await fn({
+          createQueryBuilder: () => qb,
+          create: jest.fn((_entity: unknown, row: unknown) => row),
+          save: mockPasswordResetSave,
+        });
+      },
+    ),
+  },
 };
 
 describe('Auth (e2e)', () => {
@@ -285,6 +332,7 @@ describe('Auth (e2e)', () => {
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
+        ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
         PassportModule.register({ defaultStrategy: 'jwt' }),
         JwtModule.register({ secret: env.JWT_ACCESS_SECRET }),
       ],
@@ -322,6 +370,7 @@ describe('Auth (e2e)', () => {
     usersService = moduleFixture.get(UsersService);
     verificationOtpService = moduleFixture.get(VerificationOtpService);
     mailService = moduleFixture.get(MailService);
+    jest.clearAllMocks();
   });
 
   afterEach(async () => {
@@ -344,6 +393,64 @@ describe('Auth (e2e)', () => {
     expect(createdUser?.is_verified).toBe(false);
     expect(mailService.verificationMessages).toHaveLength(1);
     expect(mailService.verificationMessages[0]?.to).toBe(registerPayload.email);
+  });
+
+  it('POST /auth/forgot-password returns same 200 payload for unknown email and does not send mail', async () => {
+    const body = { email: 'missing@example.com' };
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send(body)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      status: 'success',
+      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+    });
+    expect(mailService.passwordResetMessages).toHaveLength(0);
+    expect(mockPasswordResetTokenRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('POST /auth/forgot-password for existing user triggers token save and sends reset mail', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: registerPayload.email })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      status: 'success',
+      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+    });
+    expect(mockPasswordResetTokenRepository.save).toHaveBeenCalled();
+    expect(mailService.passwordResetMessages).toHaveLength(1);
+    expect(mailService.passwordResetMessages[0]?.to).toBe(registerPayload.email);
+    expect(mailService.passwordResetMessages[0]?.token?.length).toBeGreaterThan(
+      10,
+    );
+  });
+
+  it('POST /auth/forgot-password returns 429 after 5 requests in the same minute from the same client', async () => {
+    const body = { email: 'nobody-for-rate-limit@example.com' };
+    for (let i = 0; i < 5; i++) {
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send(body)
+        .expect(200);
+    }
+    const sixth = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send(body)
+      .expect(429);
+
+    expect(sixth.body).toMatchObject({
+      success: false,
+      status_code: 429,
+    });
   });
 
   it('POST /auth/register rejects duplicate emails', async () => {

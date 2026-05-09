@@ -45,6 +45,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.19",
     "@nestjs/swagger": "^11.4.2",
+    "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.1",
     "@t3-oss/env-core": "^0.13.11",
     "argon2": "^0.44.0",
