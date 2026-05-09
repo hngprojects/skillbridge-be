@@ -7,6 +7,7 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 
 export enum UserRole {
@@ -16,6 +17,8 @@ export enum UserRole {
 }
 
 @Entity('user_oauth_accounts')
+@Unique(['user_id', 'provider'])
+@Unique(['provider', 'provider_id'])
 export class OAuthUser {
   @ApiProperty({ format: 'uuid' })
   @PrimaryGeneratedColumn('uuid')
@@ -29,10 +32,10 @@ export class OAuthUser {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @Column({ type: 'varchar', length: 20, unique: true })
+  @Column({ type: 'varchar', length: 20 })
   provider: string;
 
-  @Column({ type: 'varchar', length: 255, unique: true })
+  @Column({ type: 'varchar', length: 255 })
   provider_id: string;
 
   @ApiProperty()
