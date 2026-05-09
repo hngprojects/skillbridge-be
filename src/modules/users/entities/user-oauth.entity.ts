@@ -5,7 +5,7 @@ import {
   CreateDateColumn,
   Entity,
   PrimaryGeneratedColumn,
-  OneToOne,
+  ManyToOne,
   JoinColumn,
 } from 'typeorm';
 
@@ -25,7 +25,7 @@ export class OAuthUser {
   @Column()
   user_id: string;
 
-  @OneToOne(() => User, (user: User) => user.id)
+  @ManyToOne(() => User, (user: User) => user.id)
   @JoinColumn({ name: 'user_id' })
   user: User;
 
