@@ -8,13 +8,14 @@ import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { PasswordResetToken } from './entities/password-reset-token.entity';
 import { VerificationOtp } from './entities/verification-otp.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([VerificationOtp]),
+    TypeOrmModule.forFeature([VerificationOtp, PasswordResetToken]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: env.JWT_ACCESS_SECRET,

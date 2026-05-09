@@ -8,6 +8,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PassportModule } from '@nestjs/passport';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
 import request from 'supertest';
 import { App, Response } from 'supertest/types';
@@ -20,6 +21,7 @@ import {
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
 import { VerificationOtpSource } from '../src/modules/auth/entities/verification-otp.entity';
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
 import { JwtStrategy } from '../src/modules/auth/strategies/jwt.strategy';
@@ -261,6 +263,19 @@ const expectAuthCookies = (response: Response): string => {
   return cookies.map(cookiePair).join('; ');
 };
 
+const mockPasswordResetTokenRepository = {
+  create: jest.fn((row: unknown) => row),
+  save: jest.fn().mockResolvedValue(undefined),
+  findOne: jest.fn().mockResolvedValue(null),
+  createQueryBuilder: jest.fn(() => ({
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    execute: jest.fn().mockResolvedValue({ affected: 0 }),
+  })),
+};
+
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
   let usersService: InMemoryUsersService;
@@ -283,6 +298,10 @@ describe('Auth (e2e)', () => {
           useClass: InMemoryVerificationOtpService,
         },
         { provide: MailService, useClass: MockMailService },
+        {
+          provide: getRepositoryToken(PasswordResetToken),
+          useValue: mockPasswordResetTokenRepository,
+        },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
         { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
