@@ -113,6 +113,7 @@ export class AuthService {
       last_name: dto.lastName,
       country: dto.country,
       profile_pic_url: dto.profile_pic_url,
+      role: dto.role,
     });
 
     const issuedOtp = await this.verificationOtpService.issue(
@@ -406,11 +407,8 @@ export class AuthService {
     return env.CORS_ORIGIN.split(',')[0]?.trim() || 'http://localhost:3000';
   }
 
-  /** Post-login Redirect Logic (auth-module-specification.md) — used for LinkedIn callback success. */
+  /** Post-login redirect based on the user's persisted role. */
   private getPostLoginRedirectPath(user: AuthUser): string {
-    if (!user.onboardingComplete) {
-      return '/onboarding/role-select';
-    }
     switch (user.role) {
       case UserRole.CANDIDATE:
         return '/dashboard';
@@ -419,7 +417,7 @@ export class AuthService {
       case UserRole.ADMIN:
         return '/admin';
       default:
-        return '/onboarding/role-select';
+        return '/dashboard';
     }
   }
 

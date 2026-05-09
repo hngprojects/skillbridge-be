@@ -66,7 +66,7 @@ export class UsersService {
         avatar_url: dto.profile_pic_url ?? null,
         is_verified: false,
         onboarding_complete: false,
-        role: UserRole.CANDIDATE,
+        role: dto.role ?? UserRole.CANDIDATE,
       },
     });
   }
