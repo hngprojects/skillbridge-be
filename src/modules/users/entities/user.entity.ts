@@ -5,9 +5,11 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { OAuthUser } from './user-oauth-account.entity';
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -71,6 +73,9 @@ export class User {
     name: 'refresh_token_hash',
   })
   refreshTokenHash: string | null;
+
+  @OneToMany(() => OAuthUser, (oauthAccount: OAuthUser) => oauthAccount.user)
+  oauthAccounts: OAuthUser[];
 
   @ApiProperty()
   @CreateDateColumn({ name: 'created_at', type: 'timestamp with time zone' })
