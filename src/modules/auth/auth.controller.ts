@@ -8,6 +8,7 @@ import {
   Query,
   Req,
   Res,
+  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -34,6 +35,14 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { LinkedInCallbackQueryDto } from './dto/linkedin-callback-query.dto';
+
+const linkedInCallbackQueryPipe = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+  transformOptions: { enableImplicitConversion: false },
+});
 
 @ApiTags('auth')
 @Controller('auth')
@@ -110,14 +119,12 @@ export class AuthController {
   async linkedInCallback(
     @Req() req: Request,
     @Res() res: Response,
-    @Query('code') code?: string,
-    @Query('state') state?: string,
-    @Query('error') oauthError?: string,
+    @Query(linkedInCallbackQueryPipe) query: LinkedInCallbackQueryDto,
   ): Promise<void> {
     await this.authService.handleLinkedInOAuthCallback(req, res, {
-      code,
-      state,
-      error: oauthError,
+      code: query.code,
+      state: query.state,
+      error: query.error,
     });
   }
 

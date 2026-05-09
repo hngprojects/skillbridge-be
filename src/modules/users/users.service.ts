@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
-import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
+import type {
+  CreateVerifiedUserWithOauthLinkParams,
+  UserOauthProvisioning,
+} from './user-oauth-provisioning.types';
 import { UserModelAction } from './actions/user.action';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PaginationDto } from './dto/pagination.dto';
@@ -42,7 +46,6 @@ export class UsersService {
     private readonly userModelAction: UserModelAction,
     @InjectRepository(OAuthUser)
     private readonly oauthRepository: Repository<OAuthUser>,
-    private readonly dataSource: DataSource,
   ) {}
 
   async create(dto: CreateUserDto): Promise<User> {
@@ -165,42 +168,11 @@ export class UsersService {
     return { oauth, user: oauth.user };
   }
 
-  async createVerifiedUserWithOauthLink(params: {
-    email: string;
-    first_name: string;
-    last_name: string;
-    country: string;
-    avatar_url: string | null;
-    provider: string;
-    providerId: string;
-  }): Promise<User> {
-    return this.dataSource.transaction(async (manager) => {
-      const userRepo = manager.getRepository(User);
-      const oauthRepo = manager.getRepository(OAuthUser);
-
-      const user = userRepo.create({
-        email: params.email,
-        password: null,
-        first_name: params.first_name,
-        last_name: params.last_name,
-        country: params.country,
-        avatar_url: params.avatar_url,
-        is_verified: true,
-        onboarding_complete: false,
-        role: UserRole.CANDIDATE,
-      });
-      await userRepo.save(user);
-
-      await oauthRepo.save(
-        oauthRepo.create({
-          user_id: user.id,
-          provider: params.provider,
-          provider_id: params.providerId,
-        }),
-      );
-
-      return userRepo.findOneOrFail({ where: { id: user.id } });
-    });
+  async createVerifiedUserWithOauthLink(
+    params: CreateVerifiedUserWithOauthLinkParams,
+  ): Promise<User> {
+    const provisioning = this.userModelAction as UserOauthProvisioning;
+    return await provisioning.createVerifiedUserWithOauthLink(params);
   }
 
   async linkOauthAccountToUser(
@@ -208,13 +180,33 @@ export class UsersService {
     provider: string,
     providerId: string,
   ): Promise<void> {
-    await this.oauthRepository.save(
-      this.oauthRepository.create({
-        user_id: userId,
+    try {
+      await this.oauthRepository.save(
+        this.oauthRepository.create({
+          user_id: userId,
+          provider,
+          provider_id: providerId,
+        }),
+      );
+    } catch (err) {
+      if (!isPostgresUniqueViolation(err)) {
+        throw err;
+      }
+      const byExternal = await this.findOauthAccountWithUser(
         provider,
-        provider_id: providerId,
-      }),
-    );
+        providerId,
+      );
+      if (byExternal?.user.id === userId) {
+        return;
+      }
+      const forUserProvider = await this.oauthRepository.findOne({
+        where: { user_id: userId, provider },
+      });
+      if (forUserProvider?.provider_id === providerId) {
+        return;
+      }
+      throw err;
+    }
   }
 
   /**
