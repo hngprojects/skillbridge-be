@@ -19,6 +19,7 @@ export class OAuthUserModelAction extends AbstractModelAction<OAuthUser> {
   ): Promise<OAuthUser | null> {
     return this.repository.findOne({
       where: { provider, provider_id },
+      relations: ['user'],
     });
   }
 
