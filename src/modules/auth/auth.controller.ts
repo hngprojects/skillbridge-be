@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   Req,
   Res,
 } from '@nestjs/common';
@@ -27,7 +28,6 @@ import {
   readCookie,
   REFRESH_TOKEN_COOKIE,
   setAuthCookies,
-  setLinkedInOAuthStateCookie,
 } from './auth.cookies';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -93,9 +93,32 @@ export class AuthController {
     description: 'LinkedIn OAuth is not configured',
   })
   linkedIn(@Res() res: Response): void {
-    const start = this.authService.createLinkedInOAuthStart();
-    setLinkedInOAuthStateCookie(res, start.state);
-    res.redirect(start.authorizationUrl);
+    this.authService.applyLinkedInOAuthStart(res);
+  }
+
+  @Public()
+  @Get('linkedin/callback')
+  @ApiOperation({
+    summary: 'LinkedIn OAuth callback',
+    description:
+      'Exchanges the code and sets auth cookies. On success, returns the same JSON shape as POST /auth/login (client decides routing using user.onboardingComplete, etc.).',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Same body contract as login: status, message, data.user, data.organisations',
+  })
+  async linkedInCallback(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('code') code?: string,
+    @Query('state') state?: string,
+    @Query('error') oauthError?: string,
+  ): Promise<void> {
+    await this.authService.handleLinkedInOAuthCallback(req, res, {
+      code,
+      state,
+      error: oauthError,
+    });
   }
 
   @Public()
