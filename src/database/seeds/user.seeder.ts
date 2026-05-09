@@ -1,4 +1,4 @@
-import * as bcrypt from 'bcrypt';
+import * as argon2 from 'argon2';
 import { DataSource } from 'typeorm';
 import { env } from '../../config/env';
 import { User, UserRole } from '../../modules/users/entities/user.entity';
@@ -27,10 +27,13 @@ export const userSeeder: Seeder = {
     const adminName = splitName(env.SEED_ADMIN_FULL_NAME);
     const admin = repository.create({
       email: adminEmail,
-      password: await bcrypt.hash(env.SEED_ADMIN_PASSWORD, 10),
+      password: await argon2.hash(env.SEED_ADMIN_PASSWORD),
       first_name: adminName.first_name,
       last_name: adminName.last_name,
+      country: 'Nigeria',
       avatar_url: null,
+      is_verified: true,
+      onboarding_complete: true,
       role: UserRole.ADMIN,
     });
     await repository.save(admin);
