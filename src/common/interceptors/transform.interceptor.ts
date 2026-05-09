@@ -23,13 +23,17 @@ export type ApiResponse<T> = {
 } & Record<string, unknown>;
 
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>> {
+export class TransformInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponse<T>
+> {
   intercept(
     context: ExecutionContext,
     next: CallHandler<T>,
   ): Observable<ApiResponse<T>> {
-    const response = context.switchToHttp().getResponse<{ statusCode: number }>();
+    const response = context
+      .switchToHttp()
+      .getResponse<{ statusCode: number }>();
     return next.handle().pipe(
       map((payload) => {
         const statusCode = response.statusCode;
@@ -43,8 +47,11 @@ export class TransformInterceptor<T>
           typeof payload === 'object' &&
           'paginationMeta' in (payload as object)
         ) {
-          const { paginationMeta, payload: data, ...rest } =
-            payload as PaginatedPayload<T>;
+          const {
+            paginationMeta,
+            payload: data,
+            ...rest
+          } = payload as PaginatedPayload<T>;
           return {
             ...baseResponse,
             data,

@@ -33,7 +33,11 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { VerificationOtpSource } from './entities/verification-otp.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
-import { isAbortError, isRecord, LINKEDIN_ACCESS_TOKEN_URL, LINKEDIN_AUTHORIZATION_URL, LINKEDIN_OAUTH_SCOPES, LINKEDIN_USERINFO_URL, OAUTH_PROVIDER_LINKEDIN, parseLinkedInTokenResponse } from './linkedin-oauth.service';
+import { isAbortError, isRecord, LINKEDIN_ACCESS_TOKEN_URL, 
+  LINKEDIN_AUTHORIZATION_URL, LINKEDIN_OAUTH_SCOPES, 
+  LINKEDIN_USERINFO_URL, OAUTH_PROVIDER_LINKEDIN, 
+  parseLinkedInTokenResponse } from './linkedin-oauth.service';
+import { GoogleProfile } from './strategies/google.strategy';
 
 export interface Organisation {
   id: string;
@@ -92,7 +96,6 @@ export interface OAuthProfilePayload {
   firstName: string;
   lastName: string;
   avatarUrl: string | null;
-}
 
 @Injectable()
 export class AuthService {
@@ -145,7 +148,7 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired otp');
     }
 
-    const verifiedUser = user.is_verified
+    const verifiedUser: User = user.is_verified
       ? user
       : await this.usersService.markVerified(user.id);
     const tokens = await this.signTokens(verifiedUser);
@@ -207,13 +210,53 @@ export class AuthService {
       });
     }
 
-    if (!user.password) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
+    if (!user.password) throw new UnauthorizedException('Invalid credentials');
     const valid = await argon2.verify(user.password, dto.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
+    return this.issueTokens(user, 'Login successful');
+  }
+
+  async googleCallback(profile: GoogleProfile): Promise<AuthResult> {
+    const { email, firstName, lastName, picture, country, providerId } =
+      profile;
+
+    // Case 1: This Google account is already linked to a user → just log them in
+    const oauthAccount = await this.usersService.findOAuthAccount(
+      'google',
+      providerId,
+    );
+    if (oauthAccount) {
+      return this.issueTokens(oauthAccount.user, 'Login successful');
+    }
+
+    // Case 2: The email exists but wasn't linked to Google yet → link it now
+    const existingUser = await this.usersService.findByEmail(email);
+    if (existingUser) {
+      await this.usersService.createOAuthAccount(
+        existingUser.id,
+        'google',
+        providerId,
+      );
+
+      // Mark user as verified when linking OAuth (OAuth providers verify email)
+      const verifiedUser = existingUser.is_verified
+        ? existingUser
+        : await this.usersService.markVerified(existingUser.id);
+
+      return this.issueTokens(verifiedUser, 'Login successful');
+    }
+
+    // Case 3: Completely new user → create account and link OAuth atomically
+    const { user } = await this.usersService.findOrCreateAndLinkOAuthUser(
+      'google',
+      providerId,
+      firstName,
+      lastName,
+      email,
+      country,
+      picture,
+    );
     return this.issueTokens(user, 'Login successful');
   }
 
