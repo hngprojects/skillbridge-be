@@ -23,6 +23,16 @@ Table user_oauth_accounts {
   created_at timestamp [not null, default: `now()`]
 }
 
+Table verification_otps {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: > users.id, not null]
+  otp_hash varchar(255) [not null]
+  expires_at timestamp [not null]
+  used_at timestamp
+  request_source varchar(20) [not null, default: 'initial', note: 'initial | resend']
+  created_at timestamp [not null, default: `now()`]
+}
+
 Table talent_profiles {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [ref: - users.id, not null]
