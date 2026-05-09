@@ -4,7 +4,9 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
+import { DataSource, QueryFailedError } from 'typeorm';
 import { UserModelAction } from './actions/user.action';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PaginationDto } from './dto/pagination.dto';
@@ -22,6 +24,7 @@ export class UsersService {
   constructor(
     private readonly userModelAction: UserModelAction,
     private readonly oauthUserModelAction: OAuthUserModelAction,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   async create(dto: CreateUserDto): Promise<User> {
@@ -84,42 +87,67 @@ export class UsersService {
     );
   }
 
-  async createOAuthUser(
+  /**
+   * Atomically creates a new User and links their OAuth provider account in a
+   * single DB transaction. If a concurrent request created the same rows between
+   * our outer check and this insert (unique-constraint violation), we re-query
+   * and return the already-existing record instead of propagating the error.
+   */
+  async findOrCreateAndLinkOAuthUser(
     provider: string,
     provider_id: string,
     first_name: string,
     last_name: string,
     email: string,
-    country: 'Unknown',
+    country: string,
     avatar_url?: string | null,
   ): Promise<{ user: User; oauthUser: OAuthUser }> {
-    const user = await this.userModelAction.create({
-      ...NO_TRANSACTION,
-      createPayload: {
-        first_name,
-        last_name,
-        email,
-        password: null,
-        is_verified: true,
-        onboarding_complete: false,
-        role: UserRole.CANDIDATE,
-        avatar_url,
-        country,
-      },
-    });
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        const tx = {
+          transactionOptions: {
+            useTransaction: true as const,
+            transaction: manager,
+          },
+        };
 
-    await this.oauthUserModelAction.insertOAuthUser(
-      user.id,
-      provider,
-      provider_id,
-    );
+        const user = await this.userModelAction.create({
+          ...tx,
+          createPayload: {
+            first_name,
+            last_name,
+            email,
+            password: null,
+            is_verified: true,
+            onboarding_complete: false,
+            role: UserRole.CANDIDATE,
+            avatar_url: avatar_url ?? null,
+            country,
+          },
+        });
 
-    const oauthUser = await this.oauthUserModelAction.findOAuthUser(
-      provider,
-      provider_id,
-    );
+        const oauthUser = await this.oauthUserModelAction.create({
+          ...tx,
+          createPayload: { user_id: user.id, provider, provider_id },
+        });
 
-    return { user, oauthUser: oauthUser! };
+        // Attach the user relation so callers don't need an extra query.
+        oauthUser.user = user;
+
+        return { user, oauthUser };
+      });
+    } catch (err) {
+      // PostgreSQL unique-violation code 23505: a concurrent request already
+      // created these rows. Re-query and return the winner's result.
+      if (err instanceof QueryFailedError && (err as any).code === '23505') {
+        const oauthUser = await this.oauthUserModelAction.findOAuthUser(
+          provider,
+          provider_id,
+        );
+        if (oauthUser) return { user: oauthUser.user, oauthUser };
+      }
+      throw err;
+    }
   }
 
   async update(id: string, dto: UpdateUserDto): Promise<User> {

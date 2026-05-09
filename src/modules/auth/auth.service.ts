@@ -235,8 +235,8 @@ export class AuthService {
       return this.issueTokens(existingUser, 'Login successful');
     }
 
-    // Case 3: Completely new user → create account and link OAuth
-    const { user } = await this.usersService.createOAuthUser(
+    // Case 3: Completely new user → create account and link OAuth atomically
+    const { user } = await this.usersService.findOrCreateAndLinkOAuthUser(
       'google',
       providerId,
       firstName,
