@@ -1,8 +1,13 @@
 import {
   ConflictException,
   INestApplication,
+<<<<<<< HEAD
   ValidationPipe,
   NotFoundException,
+=======
+  NotFoundException,
+  ValidationPipe,
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
@@ -20,8 +25,19 @@ import {
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
 import { AuthService } from '../src/modules/auth/auth.service';
+<<<<<<< HEAD
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
 import { JwtStrategy } from '../src/modules/auth/strategies/jwt.strategy';
+=======
+import { VerificationOtpSource } from '../src/modules/auth/entities/verification-otp.entity';
+import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
+import { JwtStrategy } from '../src/modules/auth/strategies/jwt.strategy';
+import {
+  IssuedVerificationOtp,
+  VerificationOtpService,
+} from '../src/modules/auth/verification-otp.service';
+import { MailService } from '../src/modules/mail/mail.service';
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 import { CreateUserDto } from '../src/modules/users/dto/create-user.dto';
 import { User, UserRole } from '../src/modules/users/entities/user.entity';
 import { UsersService } from '../src/modules/users/users.service';
@@ -39,6 +55,18 @@ type LoginPayload = {
   password: string;
 };
 
+<<<<<<< HEAD
+=======
+type StoredOtp = {
+  userId: string;
+  code: string;
+  expiresAt: Date;
+  usedAt: Date | null;
+  requestSource: VerificationOtpSource;
+  createdAt: Date;
+};
+
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 const registerPayload: RegisterPayload = {
   firstName: 'Jane',
   lastName: 'Doe',
@@ -103,6 +131,15 @@ class InMemoryUsersService {
     if (user) user.refreshTokenHash = hash;
   }
 
+<<<<<<< HEAD
+=======
+  async markVerified(id: string): Promise<User> {
+    const user = await this.findOne(id);
+    user.is_verified = true;
+    return user;
+  }
+
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   rotateRefreshTokenHash(
     id: string,
     currentHash: string,
@@ -118,6 +155,107 @@ class InMemoryUsersService {
   }
 }
 
+<<<<<<< HEAD
+=======
+class InMemoryVerificationOtpService {
+  private readonly otps: StoredOtp[] = [];
+  private nextCode = 1;
+
+  async issue(
+    userId: string,
+    requestSource: VerificationOtpSource,
+  ): Promise<IssuedVerificationOtp> {
+    const now = new Date();
+    this.otps.forEach((otp) => {
+      if (otp.userId === userId && otp.usedAt === null && otp.expiresAt > now) {
+        otp.usedAt = now;
+      }
+    });
+
+    const code = String(this.nextCode++).padStart(6, '0');
+    const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+    this.otps.push({
+      userId,
+      code,
+      expiresAt,
+      usedAt: null,
+      requestSource,
+      createdAt: now,
+    });
+
+    return { code, expiresAt };
+  }
+
+  async consume(userId: string, code: string): Promise<boolean> {
+    const latestOtp = [...this.otps]
+      .filter(
+        (otp) =>
+          otp.userId === userId &&
+          otp.usedAt === null &&
+          otp.expiresAt.getTime() > Date.now(),
+      )
+      .sort(
+        (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
+      )[0];
+
+    if (!latestOtp || latestOtp.code !== code) {
+      return false;
+    }
+
+    latestOtp.usedAt = new Date();
+    return true;
+  }
+
+  countRecentResends(userId: string, since: Date): Promise<number> {
+    const count = this.otps.filter(
+      (otp) =>
+        otp.userId === userId &&
+        otp.requestSource === VerificationOtpSource.RESEND &&
+        otp.createdAt.getTime() >= since.getTime(),
+    ).length;
+
+    return Promise.resolve(count);
+  }
+
+  peekLatestCode(userId: string): string | undefined {
+    return [...this.otps]
+      .filter((otp) => otp.userId === userId)
+      .sort(
+        (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
+      )[0]?.code;
+  }
+
+  expireLatest(userId: string): void {
+    const latestOtp = [...this.otps]
+      .filter((otp) => otp.userId === userId)
+      .sort(
+        (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
+      )[0];
+
+    if (latestOtp) {
+      latestOtp.expiresAt = new Date(Date.now() - 1_000);
+    }
+  }
+}
+
+class MockMailService {
+  readonly verificationMessages: Array<{
+    to: string;
+    otp: string;
+    expiresAt: Date;
+  }> = [];
+
+  async sendVerificationOtp(params: {
+    to: string;
+    otp: string;
+    expiresAt: Date;
+  }) {
+    this.verificationMessages.push(params);
+    return { id: `mail-${this.verificationMessages.length}` };
+  }
+}
+
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 const getSetCookies = (response: Response): string[] => {
   const header = response.headers['set-cookie'];
   if (Array.isArray(header)) return header;
@@ -144,6 +282,12 @@ const expectAuthCookies = (response: Response): string => {
 
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
+<<<<<<< HEAD
+=======
+  let usersService: InMemoryUsersService;
+  let verificationOtpService: InMemoryVerificationOtpService;
+  let mailService: MockMailService;
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -156,6 +300,14 @@ describe('Auth (e2e)', () => {
         AuthService,
         JwtStrategy,
         { provide: UsersService, useClass: InMemoryUsersService },
+<<<<<<< HEAD
+=======
+        {
+          provide: VerificationOtpService,
+          useClass: InMemoryVerificationOtpService,
+        },
+        { provide: MailService, useClass: MockMailService },
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
         { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
@@ -172,18 +324,30 @@ describe('Auth (e2e)', () => {
       }),
     );
     await app.init();
+<<<<<<< HEAD
+=======
+
+    usersService = moduleFixture.get(UsersService);
+    verificationOtpService = moduleFixture.get(VerificationOtpService);
+    mailService = moduleFixture.get(MailService);
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   });
 
   afterEach(async () => {
     if (app) await app.close();
   });
 
+<<<<<<< HEAD
   it('POST /auth/register creates a candidate session with httpOnly cookies', async () => {
+=======
+  it('POST /auth/register creates an unverified user and sends an OTP without cookies', async () => {
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
     const response = await request(app.getHttpServer())
       .post('/auth/register')
       .send(registerPayload)
       .expect(201);
 
+<<<<<<< HEAD
     expectAuthCookies(response);
     expect(response.body).toMatchObject({
       status_code: 201,
@@ -209,6 +373,40 @@ describe('Auth (e2e)', () => {
   });
 
   it('POST /auth/login creates auth cookies without returning tokens in JSON', async () => {
+=======
+    expect(getSetCookies(response)).toHaveLength(0);
+    expect(response.body).toMatchObject({
+      status_code: 201,
+      message: 'Verification otp sent',
+    });
+
+    const createdUser = await usersService.findByEmail(registerPayload.email);
+    expect(createdUser?.is_verified).toBe(false);
+    expect(mailService.verificationMessages).toHaveLength(1);
+    expect(mailService.verificationMessages[0]?.to).toBe(registerPayload.email);
+  });
+
+  it('POST /auth/register rejects duplicate emails', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(409)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          success: false,
+          status_code: 409,
+          message: 'Email already registered',
+        });
+      });
+  });
+
+  it('POST /auth/login blocks unverified users', async () => {
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
     await request(app.getHttpServer())
       .post('/auth/register')
       .send(registerPayload)
@@ -217,6 +415,7 @@ describe('Auth (e2e)', () => {
     const response = await request(app.getHttpServer())
       .post('/auth/login')
       .send(loginPayload)
+<<<<<<< HEAD
       .expect(200);
 
     expectAuthCookies(response);
@@ -238,11 +437,27 @@ describe('Auth (e2e)', () => {
   });
 
   it('POST /auth/logout revokes the session and clears auth cookies', async () => {
+=======
+      .expect(403);
+
+    expect(getSetCookies(response)).toHaveLength(0);
+    expect(response.body).toMatchObject({
+      success: false,
+      status_code: 403,
+      error: 'EMAIL_NOT_VERIFIED',
+      message: 'Please verify your email to continue',
+      email: registerPayload.email,
+    });
+  });
+
+  it('POST /auth/verify-email verifies the user and issues auth cookies', async () => {
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
     await request(app.getHttpServer())
       .post('/auth/register')
       .send(registerPayload)
       .expect(201);
 
+<<<<<<< HEAD
     const loginResponse = await request(app.getHttpServer())
       .post('/auth/login')
       .send(loginPayload)
@@ -277,17 +492,182 @@ describe('Auth (e2e)', () => {
   });
 
   it('POST /auth/refresh rotates refresh cookies and rejects the previous refresh token', async () => {
+=======
+    const user = await usersService.findByEmail(registerPayload.email);
+    const otp = verificationOtpService.peekLatestCode(user!.id);
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/verify-email')
+      .send({ email: registerPayload.email, otp })
+      .expect(200);
+
+    const authCookieHeader = expectAuthCookies(response);
+    expect(response.body).toMatchObject({
+      status_code: 200,
+      message: 'Email verified',
+      user: {
+        email: registerPayload.email,
+        first_name: registerPayload.firstName,
+        last_name: registerPayload.lastName,
+        fullname: `${registerPayload.firstName} ${registerPayload.lastName}`,
+        country: registerPayload.country,
+        role: UserRole.CANDIDATE,
+        is_verified: true,
+        onboardingComplete: false,
+      },
+    });
+
+    await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Cookie', authCookieHeader)
+      .expect(200)
+      .expect((meResponse) => {
+        expect(meResponse.body).toMatchObject({
+          status_code: 200,
+          message: 'success',
+          data: {
+            email: registerPayload.email,
+            is_verified: true,
+          },
+        });
+      });
+  });
+
+  it('POST /auth/verify-email rejects invalid, expired, and reused OTPs', async () => {
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
     await request(app.getHttpServer())
       .post('/auth/register')
       .send(registerPayload)
       .expect(201);
 
+<<<<<<< HEAD
+=======
+    const user = await usersService.findByEmail(registerPayload.email);
+    const otp = verificationOtpService.peekLatestCode(user!.id);
+
+    await request(app.getHttpServer())
+      .post('/auth/verify-email')
+      .send({ email: registerPayload.email, otp: '999999' })
+      .expect(400);
+
+    verificationOtpService.expireLatest(user!.id);
+    await request(app.getHttpServer())
+      .post('/auth/verify-email')
+      .send({ email: registerPayload.email, otp })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .post('/auth/resend-verification')
+      .send({ email: registerPayload.email })
+      .expect(200);
+
+    const freshOtp = verificationOtpService.peekLatestCode(user!.id);
+    await request(app.getHttpServer())
+      .post('/auth/verify-email')
+      .send({ email: registerPayload.email, otp: freshOtp })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post('/auth/verify-email')
+      .send({ email: registerPayload.email, otp: freshOtp })
+      .expect(400);
+  });
+
+  it('POST /auth/resend-verification invalidates the previous OTP and enforces the hourly limit', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
+
+    const user = await usersService.findByEmail(registerPayload.email);
+    const initialOtp = verificationOtpService.peekLatestCode(user!.id);
+
+    await request(app.getHttpServer())
+      .post('/auth/resend-verification')
+      .send({ email: registerPayload.email })
+      .expect(200);
+
+    const resentOtp = verificationOtpService.peekLatestCode(user!.id);
+    expect(resentOtp).not.toBe(initialOtp);
+
+    await request(app.getHttpServer())
+      .post('/auth/verify-email')
+      .send({ email: registerPayload.email, otp: initialOtp })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .post('/auth/resend-verification')
+      .send({ email: registerPayload.email })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post('/auth/resend-verification')
+      .send({ email: registerPayload.email })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post('/auth/resend-verification')
+      .send({ email: registerPayload.email })
+      .expect(429)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          success: false,
+          status_code: 429,
+          message: 'Too many requests. Please wait before trying again.',
+        });
+      });
+  });
+
+  it('POST /auth/resend-verification rejects already verified accounts', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
+
+    const user = await usersService.findByEmail(registerPayload.email);
+    const otp = verificationOtpService.peekLatestCode(user!.id);
+    await request(app.getHttpServer())
+      .post('/auth/verify-email')
+      .send({ email: registerPayload.email, otp })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post('/auth/resend-verification')
+      .send({ email: registerPayload.email })
+      .expect(400)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          success: false,
+          status_code: 400,
+          message: 'Account is already verified',
+        });
+      });
+  });
+
+  it('verified users can log in, refresh, and log out', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
+
+    const user = await usersService.findByEmail(registerPayload.email);
+    const otp = verificationOtpService.peekLatestCode(user!.id);
+    await request(app.getHttpServer())
+      .post('/auth/verify-email')
+      .send({ email: registerPayload.email, otp })
+      .expect(200);
+
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
     const loginResponse = await request(app.getHttpServer())
       .post('/auth/login')
       .send(loginPayload)
       .expect(200);
+<<<<<<< HEAD
     const loginCookies = getSetCookies(loginResponse);
     const loginCookieHeader = loginCookies.map(cookiePair).join('; ');
+=======
+    const loginCookieHeader = expectAuthCookies(loginResponse);
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 
     const refreshResponse = await request(app.getHttpServer())
       .post('/auth/refresh')
@@ -300,6 +680,7 @@ describe('Auth (e2e)', () => {
       message: 'Token refreshed successfully',
       status: 'success',
     });
+<<<<<<< HEAD
     expect(refreshResponse.body.access_token).toBeUndefined();
     expect(refreshResponse.body.refresh_token).toBeUndefined();
     expect(
@@ -317,10 +698,26 @@ describe('Auth (e2e)', () => {
           message: 'Invalid refresh token',
         });
       });
+=======
+
+    const logoutResponse = await request(app.getHttpServer())
+      .post('/auth/logout')
+      .set('Cookie', refreshCookieHeader)
+      .expect(200);
+
+    const cookies = getSetCookies(logoutResponse);
+    expect(findCookie(cookies, ACCESS_TOKEN_COOKIE)).toContain(
+      `${ACCESS_TOKEN_COOKIE}=;`,
+    );
+    expect(findCookie(cookies, REFRESH_TOKEN_COOKIE)).toContain(
+      `${REFRESH_TOKEN_COOKIE}=;`,
+    );
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 
     await request(app.getHttpServer())
       .post('/auth/refresh')
       .set('Cookie', refreshCookieHeader)
+<<<<<<< HEAD
       .expect(200);
   });
 
@@ -369,5 +766,8 @@ describe('Auth (e2e)', () => {
         onboardingComplete: false,
       },
     });
+=======
+      .expect(401);
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   });
 });

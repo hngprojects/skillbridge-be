@@ -7,9 +7,22 @@ import {
   Post,
   Req,
   Res,
+<<<<<<< HEAD
   UseGuards,
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+=======
+} from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+  ApiCookieAuth,
+  ApiForbiddenResponse,
+  ApiOperation,
+  ApiTooManyRequestsResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 import type { Request, Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
@@ -23,7 +36,12 @@ import {
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+<<<<<<< HEAD
 import { GoogleOAuthGuard } from './guards/google-auth.guard';
+=======
+import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 
 @ApiTags('auth')
 @Controller('auth')
@@ -34,6 +52,7 @@ export class AuthController {
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user' })
+<<<<<<< HEAD
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) response: Response,
@@ -41,12 +60,52 @@ export class AuthController {
     const result = await this.authService.register(dto);
     setAuthCookies(response, result.tokens);
     return this.authService.toResponse(result);
+=======
+  @ApiConflictResponse({ description: 'Email already registered' })
+  async register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify an email address with an OTP' })
+  @ApiBadRequestResponse({ description: 'Invalid or expired otp' })
+  async verifyEmail(
+    @Body() dto: VerifyEmailDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.verifyEmail(dto);
+    setAuthCookies(response, result.tokens);
+    return {
+      message: result.message,
+      user: result.user,
+    };
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend the email verification OTP' })
+  @ApiBadRequestResponse({ description: 'Account is already verified' })
+  @ApiTooManyRequestsResponse({
+    description: 'Too many requests. Please wait before trying again.',
+  })
+  async resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto);
   }
 
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Log in with email and password' })
+<<<<<<< HEAD
+=======
+  @ApiForbiddenResponse({
+    description: 'Please verify your email to continue',
+  })
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -54,6 +113,7 @@ export class AuthController {
     const result = await this.authService.login(dto);
     setAuthCookies(response, result.tokens);
     return this.authService.toResponse(result);
+<<<<<<< HEAD
   }
 
   @Public()
@@ -68,6 +128,8 @@ export class AuthController {
     const authResult = await this.authService.googleCallback();
     setAuthCookies(response, authResult.tokens);
     return this.authService.toResponse(authResult);
+=======
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   }
 
   @Public()
