@@ -28,15 +28,15 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1', {
     exclude: ['/', 'health', 'api', 'api/v1', 'api/docs', 'probe'],
   });
-  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+  app.useGlobalInterceptors(
+    new ClassSerializerInterceptor(app.get(Reflector)),
+  );
   app.enableShutdownHooks();
 
   if (env.SWAGGER_ENABLED) {
     const config = new DocumentBuilder()
       .setTitle('SkillBridge API')
-      .setDescription(
-        'API documentation built on HNG NestJS boilerplate conventions',
-      )
+      .setDescription('API documentation built on HNG NestJS boilerplate conventions')
       .setVersion('1.0.0')
       .addBearerAuth(
         { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },

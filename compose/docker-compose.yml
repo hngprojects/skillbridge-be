@@ -6,7 +6,7 @@ services:
     env_file:
       - ../.env
     ports:
-      - '3000:3000'
+      - "3000:3000"
     command: pnpm start:prod:migrate
     depends_on:
       - postgres
@@ -18,7 +18,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: nestjs_starter
     ports:
-      - '5432:5432'
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
