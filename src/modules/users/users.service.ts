@@ -144,6 +144,15 @@ export class UsersService {
     return this.findOne(id);
   }
 
+  async markOnboardingComplete(id: string): Promise<User> {
+    await this.userModelAction.update({
+      ...NO_TRANSACTION,
+      identifierOptions: { id },
+      updatePayload: { onboarding_complete: true },
+    });
+    return this.findOne(id);
+  }
+
   rotateRefreshTokenHash(
     id: string,
     currentHash: string,
