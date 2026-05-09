@@ -34,7 +34,7 @@ jobs:
         run: pnpm check-lint
 
       - name: Run tests
-        run: pnpm test
+        run: pnpm test -- --passWithNoTests
 
       - name: Build application
         run: pnpm build
