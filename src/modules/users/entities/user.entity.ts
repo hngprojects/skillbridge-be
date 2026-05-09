@@ -28,8 +28,8 @@ export class User {
   email: string;
 
   @Exclude()
-  @Column({ type: 'varchar', length: 255 })
-  password: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  password: string | null;
 
   @ApiProperty()
   @Column({ type: 'varchar', length: 255 })
