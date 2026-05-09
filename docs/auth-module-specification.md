@@ -393,8 +393,9 @@ User clicks "Continue with Google" or "Continue with LinkedIn"
 ```
 Provider redirects to:
   GET /auth/google/callback?code=...
-  GET /auth/linkedin/callback?code=...
+  GET /auth/linkedin/callback?code=...&state=...
   │
+  ├── (LinkedIn) Validate query state matches linkedin_oauth_state cookie → mismatch → 400, clear cookie
   ├── Exchange authorization code for provider access token (server-side only)
   ├── Fetch user profile from provider: { provider_id, email, firstName, lastName }
   │
@@ -660,7 +661,26 @@ Initiate Google OAuth flow. Redirects to Google consent screen.
 
 ### `GET /auth/linkedin`
 
-Initiate LinkedIn OAuth flow. Redirects to LinkedIn consent screen.
+Initiate LinkedIn OAuth flow. Redirects the browser to LinkedIn’s authorization (consent) screen.
+
+**Response:** `302 Found` — `Location` is `https://www.linkedin.com/oauth/v2/authorization` with query parameters including `client_id`, `redirect_uri`, `scope` (`openid profile email`), `state`, and `response_type=code`.
+
+**Cookies (initiate step):** Sets `linkedin_oauth_state` (httpOnly, `SameSite=Lax`, ~10 minutes) for CSRF protection. The callback must verify the `state` query parameter against this cookie before exchanging the code.
+
+**Errors:**
+
+```json
+503  { "statusCode": 503, "message": "LinkedIn OAuth is not configured" }
+```
+
+Returned when `LINKEDIN_CLIENT_ID` or `LINKEDIN_REDIRECT_URI` is missing or empty.
+
+**Environment:**
+
+| Variable | Description |
+| -------- | ----------- |
+| `LINKEDIN_CLIENT_ID` | Client ID from the LinkedIn product / app |
+| `LINKEDIN_REDIRECT_URI` | Full callback URL, must match the app’s authorized redirect URL (e.g. `http://localhost:3000/api/v1/auth/linkedin/callback`) |
 
 **Callback:** `GET /auth/linkedin/callback`
 

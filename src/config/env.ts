@@ -57,6 +57,9 @@ export const env = createEnv({
     SEED_ADMIN_EMAIL: z.email().default('admin@example.com'),
     SEED_ADMIN_PASSWORD: z.string().min(12).default('Admin@123456'),
     SEED_ADMIN_FULL_NAME: z.string().min(1).default('Admin User'),
+
+    LINKEDIN_CLIENT_ID: z.string().min(1).optional(),
+    LINKEDIN_REDIRECT_URI: z.string().url().optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

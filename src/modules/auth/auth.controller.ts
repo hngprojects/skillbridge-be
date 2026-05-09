@@ -14,6 +14,7 @@ import {
   ApiCookieAuth,
   ApiForbiddenResponse,
   ApiOperation,
+  ApiResponse,
   ApiTooManyRequestsResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -26,6 +27,7 @@ import {
   readCookie,
   REFRESH_TOKEN_COOKIE,
   setAuthCookies,
+  setLinkedInOAuthStateCookie,
 } from './auth.cookies';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -74,6 +76,26 @@ export class AuthController {
   })
   async resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto);
+  }
+
+  @Public()
+  @Get('linkedin')
+  @ApiOperation({
+    summary: 'Initiate LinkedIn OAuth',
+    description: 'Redirects the browser to the LinkedIn consent screen.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to LinkedIn authorization',
+  })
+  @ApiResponse({
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    description: 'LinkedIn OAuth is not configured',
+  })
+  linkedIn(@Res() res: Response): void {
+    const start = this.authService.createLinkedInOAuthStart();
+    setLinkedInOAuthStateCookie(res, start.state);
+    res.redirect(start.authorizationUrl);
   }
 
   @Public()
