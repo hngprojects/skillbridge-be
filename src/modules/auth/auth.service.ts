@@ -1,10 +1,12 @@
 import {
   BadRequestException,
   ForbiddenException,
+  GatewayTimeoutException,
   HttpException,
   HttpStatus,
   Injectable,
   Logger,
+  PayloadTooLargeException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -105,11 +107,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Fetch `Response.json()` is typed as `any`; narrow to `unknown` for callers. */
-async function readFetchResponseJsonUnknown(
-  res: globalThis.Response,
-): Promise<unknown> {
-  return await res.json();
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
 }
 
 function parseLinkedInTokenResponse(body: unknown): {
@@ -328,8 +327,8 @@ export class AuthService {
   }
 
   createLinkedInOAuthStart(): { authorizationUrl: string; state: string } {
-    const clientIdRaw = process.env.LINKEDIN_CLIENT_ID;
-    const redirectUriRaw = process.env.LINKEDIN_REDIRECT_URI;
+    const clientIdRaw = env.LINKEDIN_CLIENT_ID;
+    const redirectUriRaw = env.LINKEDIN_REDIRECT_URI;
     if (!clientIdRaw || !redirectUriRaw) {
       throw new ServiceUnavailableException(
         'LinkedIn OAuth is not configured',
@@ -399,9 +398,8 @@ export class AuthService {
   }
 
   /**
-   * Shared OAuth resolution: returning OAuth row, auto-link by email, or new user.
-   * Use from provider-specific callbacks after you have a normalized profile.
-   */
+   * Returns OAuth row, auto-link by email, or new user.
+  */
   async finalizeOAuthLogin(
     provider: string,
     profile: OAuthProfilePayload,
@@ -431,10 +429,79 @@ export class AuthService {
     return env.CORS_ORIGIN.split(',')[0]?.trim() || 'http://localhost:3000';
   }
 
+  private async linkedInFetch(
+    url: string,
+    init: Omit<RequestInit, 'signal'>,
+  ): Promise<globalThis.Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, env.LINKEDIN_HTTP_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      clearTimeout(timer);
+      return res;
+    } catch (err: unknown) {
+      clearTimeout(timer);
+      if (isAbortError(err)) {
+        throw new GatewayTimeoutException('LinkedIn request timed out');
+      }
+      throw err;
+    }
+  }
+
+  private async linkedInReadResponseTextCapped(
+    res: globalThis.Response,
+  ): Promise<string> {
+    const maxBytes = env.LINKEDIN_HTTP_MAX_BODY_BYTES;
+    if (res.body === null) {
+      return '';
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let received = 0;
+    let out = '';
+    try {
+      while (true) {
+        const raw = (await reader.read()) as {
+          done: boolean;
+          value?: Uint8Array;
+        };
+        if (raw.done) {
+          break;
+        }
+        const chunk = raw.value;
+        if (chunk === undefined || chunk.byteLength === 0) {
+          continue;
+        }
+        received += chunk.byteLength;
+        if (received > maxBytes) {
+          throw new PayloadTooLargeException('LinkedIn response body too large');
+        }
+        out += decoder.decode(chunk, { stream: true });
+      }
+      out += decoder.decode();
+      return out;
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  private async linkedInReadJsonResponse(
+    res: globalThis.Response,
+  ): Promise<unknown> {
+    const text = await this.linkedInReadResponseTextCapped(res);
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new BadRequestException('LinkedIn returned invalid JSON');
+    }
+  }
+
   private async exchangeLinkedInCode(code: string): Promise<string> {
-    const clientId = process.env.LINKEDIN_CLIENT_ID;
-    const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
-    const redirectUri = process.env.LINKEDIN_REDIRECT_URI;
+    const clientId = env.LINKEDIN_CLIENT_ID;
+    const clientSecret = env.LINKEDIN_CLIENT_SECRET;
+    const redirectUri = env.LINKEDIN_REDIRECT_URI;
     if (!clientId || !clientSecret || !redirectUri) {
       throw new ServiceUnavailableException(
         'LinkedIn OAuth is not fully configured',
@@ -449,13 +516,13 @@ export class AuthService {
       redirect_uri: redirectUri,
     });
 
-    const tokenResponse = await fetch(LINKEDIN_ACCESS_TOKEN_URL, {
+    const tokenResponse = await this.linkedInFetch(LINKEDIN_ACCESS_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     });
 
-    const tokenBody = await readFetchResponseJsonUnknown(tokenResponse);
+    const tokenBody = await this.linkedInReadJsonResponse(tokenResponse);
     const tokenJson = parseLinkedInTokenResponse(tokenBody);
 
     if (!tokenResponse.ok || !tokenJson) {
@@ -478,11 +545,11 @@ export class AuthService {
   private async fetchLinkedInUserInfo(
     accessToken: string,
   ): Promise<OAuthProfilePayload> {
-    const profileResponse = await fetch(LINKEDIN_USERINFO_URL, {
+    const profileResponse = await this.linkedInFetch(LINKEDIN_USERINFO_URL, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
-    const body = await readFetchResponseJsonUnknown(profileResponse);
+    const body = await this.linkedInReadJsonResponse(profileResponse);
 
     if (!profileResponse.ok || !isRecord(body)) {
       throw new BadRequestException('Failed to load LinkedIn profile');
@@ -506,13 +573,10 @@ export class AuthService {
     if (!firstName && !lastName && name) {
       const parts = name.trim().split(/\s+/);
       firstName = parts[0] ?? 'User';
-      lastName = parts.slice(1).join(' ') || ' ';
+      lastName = parts.slice(1).join(' ') || '';
     }
     if (!firstName) {
       firstName = emailRaw.split('@')[0] ?? 'User';
-    }
-    if (!lastName) {
-      lastName = ' ';
     }
 
     return {
