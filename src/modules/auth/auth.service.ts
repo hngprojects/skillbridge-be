@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { randomUUID } from 'crypto';
+import { randomUUID, timingSafeEqual } from 'crypto';
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
 import type { StringValue } from 'ms';
 import { env, linkedInHttpMaxBodyBytes, linkedInHttpTimeoutMs } from '../../config/env';
@@ -381,6 +381,7 @@ export class AuthService {
       });
       clearLinkedInOAuthStateCookie(response);
       setAuthCookies(response, result.tokens);
+
       response.redirect(
         HttpStatus.FOUND,
         `${this.getFrontendOrigin()}${this.getPostLoginRedirectPath(result.data.user)}`,
@@ -419,7 +420,15 @@ export class AuthService {
     state: string;
     stateCookie: string | undefined;
   }): Promise<AuthResult> {
-    if (!params.stateCookie || params.state !== params.stateCookie) {
+    if (!params.stateCookie || !params.state) {
+      throw new BadRequestException('Invalid OAuth state');
+    }
+    const stateBuffer = Buffer.from(params.state);
+    const cookieBuffer = Buffer.from(params.stateCookie);
+    if (stateBuffer.byteLength !== cookieBuffer.byteLength) {
+      throw new BadRequestException('Invalid OAuth state');
+    }
+    if (!timingSafeEqual(stateBuffer, cookieBuffer)) {
       throw new BadRequestException('Invalid OAuth state');
     }
 
@@ -496,14 +505,17 @@ export class AuthService {
         }
         received += chunk.byteLength;
         if (received > maxBytes) {
+          await reader.cancel('Response body too large');
           throw new PayloadTooLargeException('LinkedIn response body too large');
         }
         out += decoder.decode(chunk, { stream: true });
       }
       out += decoder.decode();
-      return out;
-    } finally {
       reader.releaseLock();
+      return out;
+    } catch (err: unknown) {
+      await reader.cancel('Read error');
+      throw err;
     }
   }
 
