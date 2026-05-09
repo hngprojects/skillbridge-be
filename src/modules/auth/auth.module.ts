@@ -11,6 +11,11 @@ import { AuthService } from './auth.service';
 import { VerificationOtp } from './entities/verification-otp.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
+<<<<<<< HEAD
+import { GoogleStrategy } from './strategies/google.strategy';
+=======
+import { VerificationOtpService } from './verification-otp.service';
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 
 @Module({
   imports: [
@@ -24,7 +29,11 @@ import { VerificationOtpService } from './verification-otp.service';
     MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, VerificationOtpService],
+<<<<<<< HEAD
+  providers: [AuthService, JwtStrategy, GoogleStrategy],
+=======
+  providers: [AuthService, JwtStrategy, VerificationOtpService, VerificationOtpService],
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   exports: [AuthService],
 })
 export class AuthModule {}

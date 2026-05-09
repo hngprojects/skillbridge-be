@@ -72,6 +72,27 @@ export interface VerifyEmailResult {
   tokens: AuthTokens;
 }
 
+export interface AuthResult {
+  message: string;
+  data: AuthSession['data'];
+  tokens: AuthTokens;
+}
+
+export interface AuthResponse {
+  message: string;
+  status: 'success';
+  data: AuthSession['data'];
+}
+
+<<<<<<< HEAD
+=======
+export interface VerifyEmailResult {
+  message: string;
+  user: AuthUser;
+  tokens: AuthTokens;
+}
+
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 @Injectable()
 export class AuthService {
   constructor(
@@ -81,7 +102,11 @@ export class AuthService {
     private readonly mailService: MailService,
   ) {}
 
+<<<<<<< HEAD
+  async register(dto: RegisterDto): Promise<AuthResult> {
+=======
   async register(dto: RegisterDto): Promise<{ message: string }> {
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
     const user = await this.usersService.create({
       email: dto.email,
       password: dto.password,
@@ -106,6 +131,8 @@ export class AuthService {
     };
   }
 
+<<<<<<< HEAD
+=======
   async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResult> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
@@ -170,10 +197,13 @@ export class AuthService {
     };
   }
 
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
+<<<<<<< HEAD
+=======
     if (!user.is_verified) {
       throw new ForbiddenException({
         error: 'EMAIL_NOT_VERIFIED',
@@ -182,12 +212,29 @@ export class AuthService {
       });
     }
 
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
     const valid = await argon2.verify(user.password, dto.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     return this.issueTokens(user, 'Login successful');
   }
 
+<<<<<<< HEAD
+  googleLogin(req) {
+    if (!req.user) {
+      return 'No user from google';
+    }
+
+    return {
+      message: 'User information from google',
+      user: req.user,
+    };
+  }
+
+  googleCallback(): Promise<AuthResult> {}
+
+=======
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   async refresh(
     refreshToken: string | undefined,
   ): Promise<{ message: string; tokens: AuthTokens }> {
