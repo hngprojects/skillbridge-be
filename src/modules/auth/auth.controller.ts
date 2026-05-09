@@ -110,12 +110,12 @@ export class AuthController {
   @ApiOperation({
     summary: 'LinkedIn OAuth callback',
     description:
-      'Exchanges the code, sets auth cookies, then redirects to the role-based application path (/dashboard, /discovery, or /admin).',
+      'Exchanges the code, sets auth cookies, then redirects to the role-based onboarding or application path.',
   })
   @ApiResponse({
     status: HttpStatus.FOUND,
     description:
-      'Redirect to SPA: /dashboard (candidate), /discovery (employer), or /admin (admin). Auth cookies set on this response.',
+      'Redirect to SPA: /candidate/onboarding or /employer/onboarding when setup is incomplete; otherwise /dashboard, /discovery, or /admin. Auth cookies set on this response.',
   })
   async linkedInCallback(
     @Req() req: Request,
