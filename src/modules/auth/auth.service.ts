@@ -4,6 +4,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -71,6 +72,11 @@ export interface VerifyEmailResult {
   user: AuthUser;
   tokens: AuthTokens;
 }
+
+const LINKEDIN_AUTHORIZATION_URL =
+  'https://www.linkedin.com/oauth/v2/authorization';
+/** Sign In with LinkedIn using OpenID Connect (member data v2). */
+const LINKEDIN_OAUTH_SCOPES = 'openid profile email';
 
 @Injectable()
 export class AuthService {
@@ -260,6 +266,30 @@ export class AuthService {
       message: session.message,
       status: 'success',
       data: session.data,
+    };
+  }
+
+  createLinkedInOAuthStart(): { authorizationUrl: string; state: string } {
+    const clientIdRaw = process.env.LINKEDIN_CLIENT_ID;
+    const redirectUriRaw = process.env.LINKEDIN_REDIRECT_URI;
+    if (!clientIdRaw || !redirectUriRaw) {
+      throw new ServiceUnavailableException(
+        'LinkedIn OAuth is not configured',
+      );
+    }
+
+    const state = randomUUID();
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientIdRaw,
+      redirect_uri: redirectUriRaw,
+      scope: LINKEDIN_OAUTH_SCOPES,
+      state,
+    });
+
+    return {
+      authorizationUrl: `${LINKEDIN_AUTHORIZATION_URL}?${params.toString()}`,
+      state,
     };
   }
 
