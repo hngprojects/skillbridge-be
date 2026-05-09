@@ -505,7 +505,6 @@ export class AuthService {
         }
         received += chunk.byteLength;
         if (received > maxBytes) {
-          await reader.cancel('Response body too large');
           throw new PayloadTooLargeException('LinkedIn response body too large');
         }
         out += decoder.decode(chunk, { stream: true });
