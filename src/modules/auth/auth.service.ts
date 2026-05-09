@@ -284,6 +284,14 @@ export class AuthService {
     return this.toAuthUser(user);
   }
 
+  async issueSessionForUser(
+    userId: string,
+    message: string,
+  ): Promise<AuthResult> {
+    const user = await this.usersService.findOne(userId);
+    return this.issueTokens(user, message);
+  }
+
   toResponse(session: AuthSession): AuthResponse {
     return {
       message: session.message,
@@ -409,6 +417,17 @@ export class AuthService {
 
   /** Post-login redirect based on the user's persisted role. */
   private getPostLoginRedirectPath(user: AuthUser): string {
+    if (!user.onboardingComplete) {
+      switch (user.role) {
+        case UserRole.CANDIDATE:
+          return '/candidate/onboarding';
+        case UserRole.EMPLOYER:
+          return '/employer/onboarding';
+        default:
+          return '/dashboard';
+      }
+    }
+
     switch (user.role) {
       case UserRole.CANDIDATE:
         return '/dashboard';
