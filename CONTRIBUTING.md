@@ -86,6 +86,7 @@ Guidelines:
   ```
 - Follow existing patterns in `src/common` and `src/modules`.
 - Prefer small, composable services and keep controllers thin.
+- A repo-managed pre-commit hook runs `pnpm lint` and `pnpm test` automatically after install.
 
 ## Tests
 
