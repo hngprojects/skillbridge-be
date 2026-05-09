@@ -10,13 +10,11 @@ import type {
   UserOauthProvisioning,
 } from './user-oauth-provisioning.types';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import * as argon2 from 'argon2';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { UserModelAction } from './actions/user.action';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { OAuthUser } from './entities/user-oauth-account.entity';
 import { User, UserRole } from './entities/user.entity';
 import { OAuthUserModelAction } from './actions/user-oauth.action';
 import { OAuthUser } from './entities/user-oauth.entity';
@@ -385,11 +383,7 @@ export class UsersService {
       if (!raced.is_verified) {
         await this.markVerified(raced.id);
       }
-      await this.linkOauthAccountToUser(
-        raced.id,
-        provider,
-        profile.providerId,
-      );
+      await this.linkOauthAccountToUser(raced.id, provider, profile.providerId);
       return this.findOne(raced.id);
     }
   }

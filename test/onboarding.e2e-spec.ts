@@ -1,5 +1,4 @@
 import {
-  ForbiddenException,
   INestApplication,
   NotFoundException,
   ValidationPipe,
@@ -296,7 +295,7 @@ describe('Onboarding (e2e)', () => {
 
     const secondAccessCookie = await accessCookieHeaderFor(
       jwtService,
-      (await usersService.findOne(user.id)) as CandidateUser,
+      (await usersService.findOne(user.id)),
     );
 
     await request(app.getHttpServer())
