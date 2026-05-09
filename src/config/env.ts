@@ -57,6 +57,12 @@ export const env = createEnv({
     SEED_ADMIN_EMAIL: z.email().default('admin@example.com'),
     SEED_ADMIN_PASSWORD: z.string().min(12).default('Admin@123456'),
     SEED_ADMIN_FULL_NAME: z.string().min(1).default('Admin User'),
+
+    GOOGLE_CLIENT_ID: z.string().min(1),
+    GOOGLE_CLIENT_SECRET: z.string().min(1),
+    GOOGLE_CALLBACK_URL: z.string().min(1),
+
+    FRONTEND_URL: z.string().default('http://localhost:5173'),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

@@ -7,11 +7,7 @@ import {
   Post,
   Req,
   Res,
-<<<<<<< HEAD
   UseGuards,
-} from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-=======
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -22,8 +18,7 @@ import {
   ApiTooManyRequestsResponse,
   ApiTags,
 } from '@nestjs/swagger';
->>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
-import type { Request, Response } from 'express';
+import { type Request, type Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -34,14 +29,13 @@ import {
   setAuthCookies,
 } from './auth.cookies';
 import { AuthService } from './auth.service';
+import { GoogleOAuthGuard } from './guards/google-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-<<<<<<< HEAD
-import { GoogleOAuthGuard } from './guards/google-auth.guard';
-=======
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
->>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
+import type { GoogleProfile } from './strategies/google.strategy';
+import { env } from '../../config/env';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -52,15 +46,6 @@ export class AuthController {
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user' })
-<<<<<<< HEAD
-  async register(
-    @Body() dto: RegisterDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    const result = await this.authService.register(dto);
-    setAuthCookies(response, result.tokens);
-    return this.authService.toResponse(result);
-=======
   @ApiConflictResponse({ description: 'Email already registered' })
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
@@ -99,12 +84,9 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Log in with email and password' })
-<<<<<<< HEAD
-=======
   @ApiForbiddenResponse({
     description: 'Please verify your email to continue',
   })
->>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -112,7 +94,6 @@ export class AuthController {
     const result = await this.authService.login(dto);
     setAuthCookies(response, result.tokens);
     return this.authService.toResponse(result);
-<<<<<<< HEAD
   }
 
   @Public()
@@ -123,12 +104,22 @@ export class AuthController {
   @Public()
   @Get('google/callback')
   @UseGuards(GoogleOAuthGuard)
-  async googleAuthRedirect(@Res({ passthrough: true }) response: Response) {
-    const authResult = await this.authService.googleCallback();
-    setAuthCookies(response, authResult.tokens);
-    return this.authService.toResponse(authResult);
-=======
->>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
+  async googleAuthRedirect(
+    @Req() request: Request & { user: GoogleProfile },
+    @Res() response: Response,
+  ) {
+    const result = await this.authService.googleCallback(request.user);
+    setAuthCookies(response, result.tokens);
+    const { role, onboardingComplete } = result.data.user;
+
+    // redirect based on role + onboarding
+    if (!onboardingComplete) {
+      return response.redirect(`${env.FRONTEND_URL}/onboarding`);
+    }
+    if (role === 'employer') {
+      return response.redirect(`${env.FRONTEND_URL}/employer/dashboard`);
+    }
+    return response.redirect(`${env.FRONTEND_URL}/dashboard`);
   }
 
   @Public()

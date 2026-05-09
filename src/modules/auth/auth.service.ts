@@ -14,6 +14,7 @@ import { env } from '../../config/env';
 import { MailService } from '../mail/mail.service';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
+import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
@@ -21,6 +22,7 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { VerificationOtpSource } from './entities/verification-otp.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
+import { GoogleProfile } from './strategies/google.strategy';
 
 export interface Organisation {
   id: string;
@@ -84,15 +86,12 @@ export interface AuthResponse {
   data: AuthSession['data'];
 }
 
-<<<<<<< HEAD
-=======
 export interface VerifyEmailResult {
   message: string;
   user: AuthUser;
   tokens: AuthTokens;
 }
 
->>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 @Injectable()
 export class AuthService {
   constructor(
@@ -102,11 +101,7 @@ export class AuthService {
     private readonly mailService: MailService,
   ) {}
 
-<<<<<<< HEAD
-  async register(dto: RegisterDto): Promise<AuthResult> {
-=======
   async register(dto: RegisterDto): Promise<{ message: string }> {
->>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
     const user = await this.usersService.create({
       email: dto.email,
       password: dto.password,
@@ -131,8 +126,6 @@ export class AuthService {
     };
   }
 
-<<<<<<< HEAD
-=======
   async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResult> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
@@ -147,9 +140,11 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired otp');
     }
 
-    const verifiedUser = user.is_verified
+    const verifiedUser: User = user.is_verified
       ? user
-      : await this.usersService.markVerified(user.id);
+      : await this.usersService.update(user.id, {
+          is_verified: true,
+        } as UpdateUserDto);
     const tokens = await this.signTokens(verifiedUser);
     await this.persistRefreshToken(verifiedUser.id, tokens.refreshToken);
 
@@ -197,13 +192,10 @@ export class AuthService {
     };
   }
 
->>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-<<<<<<< HEAD
-=======
     if (!user.is_verified) {
       throw new ForbiddenException({
         error: 'EMAIL_NOT_VERIFIED',
@@ -212,29 +204,50 @@ export class AuthService {
       });
     }
 
->>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
+    if (!user.password) throw new UnauthorizedException('Invalid credentials');
     const valid = await argon2.verify(user.password, dto.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     return this.issueTokens(user, 'Login successful');
   }
 
-<<<<<<< HEAD
-  googleLogin(req) {
-    if (!req.user) {
-      return 'No user from google';
+  async googleCallback(profile: GoogleProfile): Promise<AuthResult> {
+    const { email, firstName, lastName, picture, country, providerId } =
+      profile;
+
+    // Case 1: This Google account is already linked to a user → just log them in
+    const oauthAccount = await this.usersService.findOAuthAccount(
+      'google',
+      providerId,
+    );
+    if (oauthAccount) {
+      return this.issueTokens(oauthAccount.user, 'Login successful');
     }
 
-    return {
-      message: 'User information from google',
-      user: req.user,
-    };
+    // Case 2: The email exists but wasn't linked to Google yet → link it now
+    const existingUser = await this.usersService.findByEmail(email);
+    if (existingUser) {
+      await this.usersService.createOAuthAccount(
+        existingUser.id,
+        'google',
+        providerId,
+      );
+      return this.issueTokens(existingUser, 'Login successful');
+    }
+
+    // Case 3: Completely new user → create account and link OAuth
+    const { user } = await this.usersService.createOAuthUser(
+      'google',
+      providerId,
+      firstName,
+      lastName,
+      email,
+      country,
+      picture,
+    );
+    return this.issueTokens(user, 'Login successful');
   }
 
-  googleCallback(): Promise<AuthResult> {}
-
-=======
->>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   async refresh(
     refreshToken: string | undefined,
   ): Promise<{ message: string; tokens: AuthTokens }> {
