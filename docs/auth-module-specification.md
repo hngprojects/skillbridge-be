@@ -33,11 +33,11 @@ Auth is a Week 1 deliverable and the foundation every other SkillBridge service 
 
 SkillBridge has three distinct roles, each with a different access surface:
 
-| Role        | Access                                                      |
-| ----------- | ----------------------------------------------------------- |
-| `candidate` | Assessment pipeline, dashboard, verified profile            |
-| `employer`  | Discovery dashboard, candidate profiles (Job Ready only)    |
-| `admin`     | Moderation queue, submission review, scoring oversight      |
+| Role        | Access                                                   |
+| ----------- | -------------------------------------------------------- |
+| `candidate` | Assessment pipeline, dashboard, verified profile         |
+| `employer`  | Discovery dashboard, candidate profiles (Job Ready only) |
+| `admin`     | Moderation queue, submission review, scoring oversight   |
 
 > Admin accounts are **not self-registerable**. They are provisioned directly in the database or via an internal endpoint.
 
@@ -45,10 +45,10 @@ SkillBridge has three distinct roles, each with a different access surface:
 
 ## Signup Methods
 
-| Method                | Email verified?                                       | Password              |
-| --------------------- | ----------------------------------------------------- | --------------------- |
-| Email/password        | Required (manual, 5 - 15 mins otp)                    | Argon hash stored     |
-| Google/LinkedIn OAuth | Trust the provider for email verification             | No password           |
+| Method                | Email verified?                           | Password          |
+| --------------------- | ----------------------------------------- | ----------------- |
+| Email/password        | Required (manual, 5 - 15 mins otp)        | Argon hash stored |
+| Google/LinkedIn OAuth | Trust the provider for email verification | No password       |
 
 ---
 
@@ -206,12 +206,12 @@ Tokens are never returned in the response body. The client reads the user object
 
 ### Web vs Mobile cookie handling
 
-|                       | Web (browser)                                          | Mobile (React Native / Flutter)                                            |
-| --------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------- |
-| Cookie storage        | Native browser cookie jar                              | Manual — interceptor extracts from `Set-Cookie` header                     |
-| Cookie sending        | Automatic on every request                             | Manual — interceptor attaches `Cookie` header                              |
-| Secure storage        | httpOnly (JS cannot read)                              | `react-native-encrypted-storage` or `react-native-keychain`               |
-| Token refresh         | Automatic via interceptor on 401                       | Same — Axios interceptor fires `POST /auth/refresh`                        |
+|                | Web (browser)                    | Mobile (React Native / Flutter)                             |
+| -------------- | -------------------------------- | ----------------------------------------------------------- |
+| Cookie storage | Native browser cookie jar        | Manual — interceptor extracts from `Set-Cookie` header      |
+| Cookie sending | Automatic on every request       | Manual — interceptor attaches `Cookie` header               |
+| Secure storage | httpOnly (JS cannot read)        | `react-native-encrypted-storage` or `react-native-keychain` |
+| Token refresh  | Automatic via interceptor on 401 | Same — Axios interceptor fires `POST /auth/refresh`         |
 
 **Backend is identical for both.** The mobile client just does manually what the browser does automatically.
 
@@ -243,15 +243,15 @@ There are two distinct signup/login paths. Both converge at the same onboarding 
 
 ### At a glance
 
-|                       | Flow A — Email / Password                              | Flow B — OAuth (Google / LinkedIn)                 |
-| --------------------- | ------------------------------------------------------ | -------------------------------------------------- |
-| Entry point           | Registration form                                      | "Continue with Google/LinkedIn" button             |
-| Fields collected      | firstName, lastName, email, country, password          | Pulled from provider profile                       |
-| Email verification    | Manual — 5 - 15 mins otp sent to inbox                 | Automatic — provider pre-verifies                  |
-| Password              | Required (Argon hashed, cost 12)                       | Never set (`NULL`)                                 |
-| Account conflict      | N/A                                                    | Auto-link if email already exists                  |
-| After signup          | Must verify email → then onboarding                    | Straight to onboarding                             |
-| Onboarding required   | Yes (all new users)                                    | Yes (all new users)                                |
+|                     | Flow A — Email / Password                     | Flow B — OAuth (Google / LinkedIn)     |
+| ------------------- | --------------------------------------------- | -------------------------------------- |
+| Entry point         | Registration form                             | "Continue with Google/LinkedIn" button |
+| Fields collected    | firstName, lastName, email, country, password | Pulled from provider profile           |
+| Email verification  | Manual — 5 - 15 mins otp sent to inbox        | Automatic — provider pre-verifies      |
+| Password            | Required (Argon hashed, cost 12)              | Never set (`NULL`)                     |
+| Account conflict    | N/A                                           | Auto-link if email already exists      |
+| After signup        | Must verify email → then onboarding           | Straight to onboarding                 |
+| Onboarding required | Yes (all new users)                           | Yes (all new users)                    |
 
 **Both paths issue the same JWT and set the same httpOnly refresh token cookie. Post-onboarding behaviour is identical regardless of how the user signed up.**
 
@@ -431,13 +431,13 @@ Provider redirects to:
 
 #### B3. Key differences from Email/Password flow
 
-|                       | Email / Password                      | OAuth                                                |
-| --------------------- | ------------------------------------- | ---------------------------------------------------- |
-| Password              | Required (Argon hashed)               | Never set (`NULL`)                                   |
-| Email verification    | Manual (5 - 15mins otp via email)      | Automatic (`is_verified = true` on create)           |
-| Name collection       | From registration form                | From provider profile                                |
-| Account conflict      | N/A                                   | Auto-link via `user_oauth_accounts`                  |
-| Onboarding step       | Always required after verify          | Always required for new users                        |
+|                    | Email / Password                  | OAuth                                      |
+| ------------------ | --------------------------------- | ------------------------------------------ |
+| Password           | Required (Argon hashed)           | Never set (`NULL`)                         |
+| Email verification | Manual (5 - 15mins otp via email) | Automatic (`is_verified = true` on create) |
+| Name collection    | From registration form            | From provider profile                      |
+| Account conflict   | N/A                               | Auto-link via `user_oauth_accounts`        |
+| Onboarding step    | Always required after verify      | Always required for new users              |
 
 ---
 
@@ -532,10 +532,10 @@ Register with email and password.
 ```json
 {
   "firstName": "string",
-  "lastName":  "string",
-  "email":     "string",
-  "country":   "string",
-  "password":  "string (min 8 chars)"
+  "lastName": "string",
+  "email": "string",
+  "country": "string",
+  "password": "string (min 8 chars)"
 }
 ```
 
@@ -558,7 +558,7 @@ Confirm email address using OTP.
 ```json
 {
   "email": "string",
-  "otp":   "string"
+  "otp": "string"
 }
 ```
 
@@ -610,7 +610,7 @@ Email/password login.
 
 ```json
 {
-  "email":    "string",
+  "email": "string",
   "password": "string"
 }
 ```
@@ -741,8 +741,8 @@ Set a new password using a reset token.
 
 ```json
 {
-  "token":           "string",
-  "password":        "string",
+  "token": "string",
+  "password": "string",
   "confirmPassword": "string"
 }
 ```
@@ -767,7 +767,7 @@ Complete role selection and profile setup. Called after email verification or fi
 
 ```json
 {
-  "role":      "candidate",
+  "role": "candidate",
   "roleTrack": "frontend | data | design | ..."
 }
 ```
@@ -776,7 +776,7 @@ Complete role selection and profile setup. Called after email verification or fi
 
 ```json
 {
-  "role":        "employer",
+  "role": "employer",
   "companyName": "string"
 }
 ```
@@ -824,34 +824,34 @@ Get the currently authenticated user. Cookie sent automatically.
 
 ## Business Rules
 
-| Rule                                    | Detail                                                                                      |
-| --------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Email verification is mandatory         | Unverified users get `EMAIL_NOT_VERIFIED` 403 on login — client starts verification flow    |
-| Unverified login triggers resend flow   | Client redirects to "check your inbox" screen with resend button                            |
-| OAuth users are auto-verified           | Google and LinkedIn pre-verify emails — no verification email sent                          |
-| Role selection is required              | OAuth and email users must complete onboarding before dashboard access                      |
-| Employers must supply company name      | Required field during onboarding, not optional                                              |
-| Candidates must select a role track     | Required to enter the assessment pipeline                                                   |
-| Password reset revokes all sessions     | All refresh tokens for the user are revoked on reset                                        |
-| Admin accounts are not self-registerable| Provisioned directly or via internal endpoint                                               |
-| Auto-link on OAuth conflict             | If OAuth email matches existing account, accounts are silently linked via `user_oauth_accounts` |
-| Tokens never in response body           | Both access and refresh tokens are httpOnly cookies only — response body contains user object only |
+| Rule                                     | Detail                                                                                             |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Email verification is mandatory          | Unverified users get `EMAIL_NOT_VERIFIED` 403 on login — client starts verification flow           |
+| Unverified login triggers resend flow    | Client redirects to "check your inbox" screen with resend button                                   |
+| OAuth users are auto-verified            | Google and LinkedIn pre-verify emails — no verification email sent                                 |
+| Role selection is required               | OAuth and email users must complete onboarding before dashboard access                             |
+| Employers must supply company name       | Required field during onboarding, not optional                                                     |
+| Candidates must select a role track      | Required to enter the assessment pipeline                                                          |
+| Password reset revokes all sessions      | All refresh tokens for the user are revoked on reset                                               |
+| Admin accounts are not self-registerable | Provisioned directly or via internal endpoint                                                      |
+| Auto-link on OAuth conflict              | If OAuth email matches existing account, accounts are silently linked via `user_oauth_accounts`    |
+| Tokens never in response body            | Both access and refresh tokens are httpOnly cookies only — response body contains user object only |
 
 ---
 
 ## Security Requirements
 
-| Requirement                | Detail                                                                                                    |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Password hashing           | Argon, cost factor 12                                                                                     |
-| Access token storage       | `httpOnly`, `Secure`, `SameSite=Strict` cookie — 15min TTL                                                |
-| Refresh token storage      | `httpOnly`, `Secure`, `SameSite=Strict` cookie — 7 days TTL                                               |
-| Token rotation             | Refresh tokens rotate on every use — old token immediately revoked                                         |
-| Rate limiting              | `/auth/login`: 5 req/min per IP · `/auth/forgot-password`: 5 req/min · `/auth/resend-verification`: 3 per hour per email |
-| Email enumeration prevention | Forgot password always returns 200 regardless of email existence                                         |
-| Token TTLs                 | Access: 15min · Refresh: 7 days · Email verify: 24hr · Password reset: 1hr                               |
-| HTTPS only                 | All auth endpoints require TLS in production                                                              |
-| CORS credentials           | `credentials: true` required on backend — mobile uses `withCredentials: true` on Axios                    |
+| Requirement                  | Detail                                                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Password hashing             | Argon, cost factor 12                                                                                                    |
+| Access token storage         | `httpOnly`, `Secure`, `SameSite=Strict` cookie — 15min TTL                                                               |
+| Refresh token storage        | `httpOnly`, `Secure`, `SameSite=Strict` cookie — 7 days TTL                                                              |
+| Token rotation               | Refresh tokens rotate on every use — old token immediately revoked                                                       |
+| Rate limiting                | `/auth/login`: 5 req/min per IP · `/auth/forgot-password`: 5 req/min · `/auth/resend-verification`: 3 per hour per email |
+| Email enumeration prevention | Forgot password always returns 200 regardless of email existence                                                         |
+| Token TTLs                   | Access: 15min · Refresh: 7 days · Email verify: 24hr · Password reset: 1hr                                               |
+| HTTPS only                   | All auth endpoints require TLS in production                                                                             |
+| CORS credentials             | `credentials: true` required on backend — mobile uses `withCredentials: true` on Axios                                   |
 
 ---
 
