@@ -1,14 +1,26 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { randomUUID } from 'crypto';
 import type { StringValue } from 'ms';
 import { env } from '../../config/env';
+import { MailService } from '../mail/mail.service';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { VerificationOtpSource } from './entities/verification-otp.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { VerificationOtpService } from './verification-otp.service';
 
 export interface Organisation {
   id: string;
@@ -54,14 +66,29 @@ export interface AuthResponse {
   data: AuthSession['data'];
 }
 
+<<<<<<< HEAD
+=======
+export interface VerifyEmailResult {
+  message: string;
+  user: AuthUser;
+  tokens: AuthTokens;
+}
+
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly verificationOtpService: VerificationOtpService,
+    private readonly mailService: MailService,
   ) {}
 
+<<<<<<< HEAD
   async register(dto: RegisterDto): Promise<AuthResult> {
+=======
+  async register(dto: RegisterDto): Promise<{ message: string }> {
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
     const user = await this.usersService.create({
       email: dto.email,
       password: dto.password,
@@ -70,19 +97,111 @@ export class AuthService {
       country: dto.country,
       profile_pic_url: dto.profile_pic_url,
     });
-    return this.issueTokens(user, 'User created successfully');
+
+    const issuedOtp = await this.verificationOtpService.issue(
+      user.id,
+      VerificationOtpSource.INITIAL,
+    );
+    await this.mailService.sendVerificationOtp({
+      to: user.email,
+      otp: issuedOtp.code,
+      expiresAt: issuedOtp.expiresAt,
+    });
+
+    return {
+      message: 'Verification otp sent',
+    };
   }
 
+<<<<<<< HEAD
+=======
+  async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResult> {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (!user) {
+      throw new BadRequestException('Invalid or expired otp');
+    }
+
+    const isValidOtp = await this.verificationOtpService.consume(
+      user.id,
+      dto.otp,
+    );
+    if (!isValidOtp) {
+      throw new BadRequestException('Invalid or expired otp');
+    }
+
+    const verifiedUser = user.is_verified
+      ? user
+      : await this.usersService.markVerified(user.id);
+    const tokens = await this.signTokens(verifiedUser);
+    await this.persistRefreshToken(verifiedUser.id, tokens.refreshToken);
+
+    return {
+      message: 'Email verified',
+      user: this.toAuthUser(verifiedUser),
+      tokens,
+    };
+  }
+
+  async resendVerification(
+    dto: ResendVerificationDto,
+  ): Promise<{ message: string }> {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (!user) {
+      throw new BadRequestException('Account not found');
+    }
+    if (user.is_verified) {
+      throw new BadRequestException('Account is already verified');
+    }
+
+    const resendCount = await this.verificationOtpService.countRecentResends(
+      user.id,
+      new Date(Date.now() - 60 * 60 * 1000),
+    );
+    if (resendCount >= env.VERIFICATION_RESEND_LIMIT_PER_HOUR) {
+      throw new HttpException(
+        'Too many requests. Please wait before trying again.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const issuedOtp = await this.verificationOtpService.issue(
+      user.id,
+      VerificationOtpSource.RESEND,
+    );
+    await this.mailService.sendVerificationOtp({
+      to: user.email,
+      otp: issuedOtp.code,
+      expiresAt: issuedOtp.expiresAt,
+    });
+
+    return {
+      message: 'Verification email resent',
+    };
+  }
+
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
+<<<<<<< HEAD
+=======
+    if (!user.is_verified) {
+      throw new ForbiddenException({
+        error: 'EMAIL_NOT_VERIFIED',
+        message: 'Please verify your email to continue',
+        email: user.email,
+      });
+    }
+
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
     const valid = await argon2.verify(user.password, dto.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     return this.issueTokens(user, 'Login successful');
   }
 
+<<<<<<< HEAD
   googleLogin(req) {
     if (!req.user) {
       return 'No user from google';
@@ -96,6 +215,8 @@ export class AuthService {
 
   googleCallback(): Promise<AuthResult> {}
 
+=======
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   async refresh(
     refreshToken: string | undefined,
   ): Promise<{ message: string; tokens: AuthTokens }> {

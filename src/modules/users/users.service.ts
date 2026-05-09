@@ -119,6 +119,18 @@ export class UsersService {
     });
   }
 
+<<<<<<< HEAD
+=======
+  async markVerified(id: string): Promise<User> {
+    await this.userModelAction.update({
+      ...NO_TRANSACTION,
+      identifierOptions: { id },
+      updatePayload: { is_verified: true },
+    });
+    return this.findOne(id);
+  }
+
+>>>>>>> feebe3cf677712cd043c1cbe989c854fa4c36c41
   rotateRefreshTokenHash(
     id: string,
     currentHash: string,
