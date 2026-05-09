@@ -1,13 +1,26 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import * as argon2 from 'argon2';
+import { randomUUID } from 'crypto';
 import type { StringValue } from 'ms';
 import { env } from '../../config/env';
+import { MailService } from '../mail/mail.service';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { VerificationOtpSource } from './entities/verification-otp.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { VerificationOtpService } from './verification-otp.service';
 
 export interface Organisation {
   id: string;
@@ -22,20 +35,41 @@ export interface AuthUser {
   last_name: string;
   fullname: string;
   avatar_url: string | null;
+  country: string;
   role: string;
+  is_verified: boolean;
+  onboardingComplete: boolean;
 }
 
 export interface AuthTokens {
-  message: string;
-  access_token: string;
-  refresh_token: string;
+  accessToken: string;
+  refreshToken: string;
 }
 
-export interface AuthResponse extends AuthTokens {
+export interface AuthSession {
+  message: string;
   data: {
     user: AuthUser;
     organisations: Organisation[];
   };
+}
+
+export interface AuthResult {
+  message: string;
+  data: AuthSession['data'];
+  tokens: AuthTokens;
+}
+
+export interface AuthResponse {
+  message: string;
+  status: 'success';
+  data: AuthSession['data'];
+}
+
+export interface VerifyEmailResult {
+  message: string;
+  user: AuthUser;
+  tokens: AuthTokens;
 }
 
 @Injectable()
@@ -43,30 +77,122 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly verificationOtpService: VerificationOtpService,
+    private readonly mailService: MailService,
   ) {}
 
-  async register(dto: RegisterDto): Promise<AuthResponse> {
+  async register(dto: RegisterDto): Promise<{ message: string }> {
     const user = await this.usersService.create({
       email: dto.email,
       password: dto.password,
-      first_name: dto.first_name,
-      last_name: dto.last_name,
+      first_name: dto.firstName,
+      last_name: dto.lastName,
+      country: dto.country,
       profile_pic_url: dto.profile_pic_url,
     });
-    return this.issueTokens(user, 'User created successfully');
+
+    const issuedOtp = await this.verificationOtpService.issue(
+      user.id,
+      VerificationOtpSource.INITIAL,
+    );
+    await this.mailService.sendVerificationOtp({
+      to: user.email,
+      otp: issuedOtp.code,
+      expiresAt: issuedOtp.expiresAt,
+    });
+
+    return {
+      message: 'Verification otp sent',
+    };
   }
 
-  async login(dto: LoginDto): Promise<AuthResponse> {
+  async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResult> {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (!user) {
+      throw new BadRequestException('Invalid or expired otp');
+    }
+
+    const isValidOtp = await this.verificationOtpService.consume(
+      user.id,
+      dto.otp,
+    );
+    if (!isValidOtp) {
+      throw new BadRequestException('Invalid or expired otp');
+    }
+
+    const verifiedUser = user.is_verified
+      ? user
+      : await this.usersService.markVerified(user.id);
+    const tokens = await this.signTokens(verifiedUser);
+    await this.persistRefreshToken(verifiedUser.id, tokens.refreshToken);
+
+    return {
+      message: 'Email verified',
+      user: this.toAuthUser(verifiedUser),
+      tokens,
+    };
+  }
+
+  async resendVerification(
+    dto: ResendVerificationDto,
+  ): Promise<{ message: string }> {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (!user) {
+      throw new BadRequestException('Account not found');
+    }
+    if (user.is_verified) {
+      throw new BadRequestException('Account is already verified');
+    }
+
+    const resendCount = await this.verificationOtpService.countRecentResends(
+      user.id,
+      new Date(Date.now() - 60 * 60 * 1000),
+    );
+    if (resendCount >= env.VERIFICATION_RESEND_LIMIT_PER_HOUR) {
+      throw new HttpException(
+        'Too many requests. Please wait before trying again.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const issuedOtp = await this.verificationOtpService.issue(
+      user.id,
+      VerificationOtpSource.RESEND,
+    );
+    await this.mailService.sendVerificationOtp({
+      to: user.email,
+      otp: issuedOtp.code,
+      expiresAt: issuedOtp.expiresAt,
+    });
+
+    return {
+      message: 'Verification email resent',
+    };
+  }
+
+  async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const valid = await bcrypt.compare(dto.password, user.password);
+    if (!user.is_verified) {
+      throw new ForbiddenException({
+        error: 'EMAIL_NOT_VERIFIED',
+        message: 'Please verify your email to continue',
+        email: user.email,
+      });
+    }
+
+    const valid = await argon2.verify(user.password, dto.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     return this.issueTokens(user, 'Login successful');
   }
 
-  async refresh(refreshToken: string): Promise<AuthTokens> {
+  async refresh(
+    refreshToken: string | undefined,
+  ): Promise<{ message: string; tokens: AuthTokens }> {
+    if (!refreshToken) throw new UnauthorizedException('Invalid refresh token');
+
     let payload: JwtPayload;
     try {
       payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
@@ -81,16 +207,47 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token has been revoked');
     }
 
-    const matches = await bcrypt.compare(refreshToken, user.refreshTokenHash);
+    const matches = await argon2.verify(user.refreshTokenHash, refreshToken);
     if (!matches) throw new UnauthorizedException('Invalid refresh token');
 
-    const tokens = await this.signTokens(user, 'Token refreshed successfully');
-    await this.persistRefreshToken(user.id, tokens.refresh_token);
-    return tokens;
+    const tokens = await this.signTokens(user);
+    const nextHash = await argon2.hash(tokens.refreshToken);
+    const rotated = await this.usersService.rotateRefreshTokenHash(
+      user.id,
+      user.refreshTokenHash,
+      nextHash,
+    );
+    if (!rotated) throw new UnauthorizedException('Invalid refresh token');
+
+    return {
+      message: 'Token refreshed successfully',
+      tokens,
+    };
   }
 
   async logout(userId: string): Promise<void> {
     await this.usersService.setRefreshTokenHash(userId, null);
+  }
+
+  async logoutByRefreshToken(refreshToken: string | undefined): Promise<void> {
+    if (!refreshToken) return;
+
+    let payload: JwtPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
+        secret: env.JWT_REFRESH_SECRET,
+      });
+    } catch {
+      return;
+    }
+
+    const user = await this.usersService.findOneOrNull(payload.sub);
+    if (!user?.refreshTokenHash) return;
+
+    const matches = await argon2.verify(user.refreshTokenHash, refreshToken);
+    if (!matches) return;
+
+    await this.usersService.setRefreshTokenHash(user.id, null);
   }
 
   async getProfile(userId: string): Promise<AuthUser> {
@@ -98,35 +255,54 @@ export class AuthService {
     return this.toAuthUser(user);
   }
 
-  private async issueTokens(user: User, message: string): Promise<AuthResponse> {
-    const tokens = await this.signTokens(user, message);
-    await this.persistRefreshToken(user.id, tokens.refresh_token);
+  toResponse(session: AuthSession): AuthResponse {
+    return {
+      message: session.message,
+      status: 'success',
+      data: session.data,
+    };
+  }
+
+  private async issueTokens(user: User, message: string): Promise<AuthResult> {
+    const tokens = await this.signTokens(user);
+    await this.persistRefreshToken(user.id, tokens.refreshToken);
 
     return {
-      ...tokens,
+      message,
       data: {
         user: this.toAuthUser(user),
         organisations: [],
       },
+      tokens,
     };
   }
 
-  private async signTokens(user: User, message: string): Promise<AuthTokens> {
-    const payload: JwtPayload = { sub: user.id, email: user.email };
+  private async signTokens(user: User): Promise<AuthTokens> {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      onboardingComplete: user.onboarding_complete,
+    };
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, {
-        secret: env.JWT_ACCESS_SECRET,
-        expiresIn: env.JWT_ACCESS_EXPIRES_IN as StringValue,
-      }),
-      this.jwtService.signAsync(payload, {
-        secret: env.JWT_REFRESH_SECRET,
-        expiresIn: env.JWT_REFRESH_EXPIRES_IN as StringValue,
-      }),
+      this.jwtService.signAsync(
+        { ...payload, jti: randomUUID() },
+        {
+          secret: env.JWT_ACCESS_SECRET,
+          expiresIn: env.JWT_ACCESS_EXPIRES_IN as StringValue,
+        },
+      ),
+      this.jwtService.signAsync(
+        { ...payload, jti: randomUUID() },
+        {
+          secret: env.JWT_REFRESH_SECRET,
+          expiresIn: env.JWT_REFRESH_EXPIRES_IN as StringValue,
+        },
+      ),
     ]);
     return {
-      message,
-      access_token: accessToken,
-      refresh_token: refreshToken,
+      accessToken,
+      refreshToken,
     };
   }
 
@@ -134,7 +310,7 @@ export class AuthService {
     userId: string,
     refreshToken: string,
   ): Promise<void> {
-    const hash = await bcrypt.hash(refreshToken, 10);
+    const hash = await argon2.hash(refreshToken);
     await this.usersService.setRefreshTokenHash(userId, hash);
   }
 
@@ -146,7 +322,10 @@ export class AuthService {
       last_name: user.last_name,
       fullname: user.fullname,
       avatar_url: user.avatar_url,
+      country: user.country,
       role: user.role,
+      is_verified: user.is_verified,
+      onboardingComplete: user.onboarding_complete,
     };
   }
 }
