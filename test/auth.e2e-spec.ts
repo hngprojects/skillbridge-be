@@ -282,6 +282,9 @@ const expectAuthCookies = (response: Response): string => {
 };
 
 const mockPasswordResetSave = jest.fn().mockResolvedValue(undefined);
+const mockPasswordResetInvalidateExecute = jest.fn().mockResolvedValue({
+  affected: 0,
+});
 
 const mockPasswordResetTokenRepository = {
   create: jest.fn((row: unknown) => row),
@@ -292,7 +295,7 @@ const mockPasswordResetTokenRepository = {
     set: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
-    execute: jest.fn().mockResolvedValue({ affected: 0 }),
+    execute: mockPasswordResetInvalidateExecute,
   })),
   manager: {
     transaction: jest.fn(async (fn: (m: {
@@ -303,6 +306,7 @@ const mockPasswordResetTokenRepository = {
         andWhere: jest.Mock;
         execute: jest.Mock;
       };
+      findOne: jest.Mock;
       create: jest.Mock;
       save: jest.Mock;
     }) => Promise<void>) => {
@@ -311,10 +315,16 @@ const mockPasswordResetTokenRepository = {
           set: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
-          execute: jest.fn().mockResolvedValue({ affected: 0 }),
+          execute: mockPasswordResetInvalidateExecute,
         };
         await fn({
           createQueryBuilder: () => qb,
+          findOne: jest.fn(async (Entity: unknown, opts?: { where?: { id?: string } }) => {
+            if (Entity === User && opts?.where?.id) {
+              return { id: opts.where.id };
+            }
+            return null;
+          }),
           create: jest.fn((_entity: unknown, row: unknown) => row),
           save: mockPasswordResetSave,
         });
@@ -409,6 +419,7 @@ describe('Auth (e2e)', () => {
     });
     expect(mailService.passwordResetMessages).toHaveLength(0);
     expect(mockPasswordResetTokenRepository.save).not.toHaveBeenCalled();
+    expect(mockPasswordResetInvalidateExecute).not.toHaveBeenCalled();
   });
 
   it('POST /auth/forgot-password for existing user triggers token save and sends reset mail', async () => {
@@ -426,12 +437,38 @@ describe('Auth (e2e)', () => {
       status: 'success',
       message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
     });
+    expect(mockPasswordResetInvalidateExecute).toHaveBeenCalled();
     expect(mockPasswordResetTokenRepository.save).toHaveBeenCalled();
     expect(mailService.passwordResetMessages).toHaveLength(1);
     expect(mailService.passwordResetMessages[0]?.to).toBe(registerPayload.email);
     expect(mailService.passwordResetMessages[0]?.token?.length).toBeGreaterThan(
       10,
     );
+  });
+
+  it('POST /auth/forgot-password sets reset link with fragment token when PASSWORD_RESET_WEB_BASE_URL is set', async () => {
+    jest.replaceProperty(
+      env,
+      'PASSWORD_RESET_WEB_BASE_URL',
+      'https://example.com/reset',
+    );
+    try {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send(registerPayload)
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email: registerPayload.email })
+        .expect(200);
+
+      const link = mailService.passwordResetMessages[0]?.resetLink;
+      expect(link).toBeDefined();
+      expect(link).toMatch(/^https:\/\/example\.com\/reset#token=/);
+    } finally {
+      jest.replaceProperty(env, 'PASSWORD_RESET_WEB_BASE_URL', undefined);
+    }
   });
 
   it('POST /auth/forgot-password returns 429 after 5 requests in the same minute from the same client', async () => {
