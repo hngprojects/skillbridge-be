@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ExecutionContext,
   INestApplication,
   NotFoundException,
   ValidationPipe,
@@ -10,7 +11,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PassportModule } from '@nestjs/passport';
 import * as argon2 from 'argon2';
 import request from 'supertest';
-import { App, Response } from 'supertest/types';
+import { App } from 'supertest/types';
+import { Response } from 'supertest';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor';
 import { env } from '../src/config/env';
@@ -20,6 +22,9 @@ import {
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { GoogleOAuthGuard } from '../src/modules/auth/guards/google-auth.guard';
+import type { GoogleProfile } from '../src/modules/auth/strategies/google.strategy';
+import { OAuthUser } from '../src/modules/users/entities/user-oauth.entity';
 import { VerificationOtpSource } from '../src/modules/auth/entities/verification-otp.entity';
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
 import { JwtStrategy } from '../src/modules/auth/strategies/jwt.strategy';
@@ -29,6 +34,7 @@ import {
 } from '../src/modules/auth/verification-otp.service';
 import { MailService } from '../src/modules/mail/mail.service';
 import { CreateUserDto } from '../src/modules/users/dto/create-user.dto';
+import { UpdateUserDto } from '../src/modules/users/dto/update-user.dto';
 import { User, UserRole } from '../src/modules/users/entities/user.entity';
 import { UsersService } from '../src/modules/users/users.service';
 
@@ -136,6 +142,85 @@ class InMemoryUsersService {
 
     user.refreshTokenHash = nextHash;
     return Promise.resolve(true);
+  }
+
+  async update(id: string, dto: UpdateUserDto): Promise<User> {
+    const user = await this.findOne(id);
+    const { profile_pic_url: profilePicUrl, ...rest } = dto as UpdateUserDto & {
+      profile_pic_url?: string;
+    };
+    Object.assign(user, rest);
+    if (profilePicUrl !== undefined) user.avatar_url = profilePicUrl;
+    return user;
+  }
+
+  // ── OAuth helpers ──────────────────────────────────────────────────────
+  // A simple list of { provider, provider_id, user } records
+  private readonly oauthAccounts: Array<{
+    provider: string;
+    provider_id: string;
+    user: User;
+  }> = [];
+
+  findOAuthAccount(
+    provider: string,
+    provider_id: string,
+  ): Promise<OAuthUser | null> {
+    const found = this.oauthAccounts.find(
+      (a) => a.provider === provider && a.provider_id === provider_id,
+    );
+    // Return a minimal OAuthUser shape with the linked user attached
+    return Promise.resolve(
+      found ? Object.assign(new OAuthUser(), found) : null,
+    );
+  }
+
+  createOAuthAccount(
+    userId: string,
+    provider: string,
+    provider_id: string,
+  ): Promise<void> {
+    const user = this.usersById.get(userId)!;
+    this.oauthAccounts.push({ provider, provider_id, user });
+    return Promise.resolve();
+  }
+
+  async createOAuthUser(
+    provider: string,
+    provider_id: string,
+    first_name: string,
+    last_name: string,
+    email: string,
+    country: 'Unknown',
+    avatar_url?: string | null,
+  ): Promise<{ user: User; oauthUser: OAuthUser }> {
+    const user = Object.assign(new User(), {
+      id: `user-${this.nextId++}`,
+      email,
+      password: null,
+      first_name,
+      last_name,
+      country,
+      avatar_url: avatar_url ?? null,
+      is_verified: true,
+      onboarding_complete: false,
+      role: UserRole.CANDIDATE,
+      refreshTokenHash: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+    });
+
+    this.usersById.set(user.id, user);
+    this.usersByEmail.set(user.email, user);
+    this.oauthAccounts.push({ provider, provider_id, user });
+
+    const oauthUser = Object.assign(new OAuthUser(), {
+      provider,
+      provider_id,
+      user,
+    });
+    return { user, oauthUser };
   }
 }
 
@@ -569,5 +654,133 @@ describe('Auth (e2e)', () => {
       .post('/auth/refresh')
       .set('Cookie', refreshCookieHeader)
       .expect(401);
+  });
+});
+
+// github-callback endpoint test
+const googleProfile: GoogleProfile = {
+  email: 'google-user@example.com',
+  firstName: 'Google',
+  lastName: 'User',
+  picture: 'https://example.com/photo.jpg',
+  providerId: 'google-provider-123',
+  country: 'Unknown',
+};
+
+class FakeGoogleOAuthGuard {
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest();
+    req.user = googleProfile;
+    return true;
+  }
+}
+
+describe('Google OAuth callback (e2e)', () => {
+  let app: INestApplication<App>;
+  let usersService: InMemoryUsersService;
+
+  beforeEach(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [
+        PassportModule.register({ defaultStrategy: 'jwt' }),
+        JwtModule.register({ secret: env.JWT_ACCESS_SECRET }),
+      ],
+      controllers: [AuthController],
+      providers: [
+        AuthService,
+        JwtStrategy,
+        { provide: UsersService, useClass: InMemoryUsersService },
+        {
+          provide: VerificationOtpService,
+          useClass: InMemoryVerificationOtpService,
+        },
+        { provide: MailService, useClass: MockMailService },
+        { provide: APP_GUARD, useClass: JwtAuthGuard },
+        { provide: APP_FILTER, useClass: HttpExceptionFilter },
+        { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
+        { provide: GoogleOAuthGuard, useClass: FakeGoogleOAuthGuard },
+      ],
+    })
+      .overrideGuard(GoogleOAuthGuard)
+      .useClass(FakeGoogleOAuthGuard)
+      .compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+        transformOptions: { enableImplicitConversion: false },
+      }),
+    );
+    await app.init();
+
+    usersService = moduleFixture.get(UsersService);
+  });
+
+  afterEach(async () => {
+    if (app) await app.close();
+  });
+
+  it('GET /auth/google/callback logs in a returning Google user (already linked)', async () => {
+    await usersService.createOAuthUser(
+      'google',
+      googleProfile.providerId,
+      googleProfile.firstName,
+      googleProfile.lastName,
+      googleProfile.email,
+      'Unknown',
+      googleProfile.picture,
+    );
+
+    const response = await request(app.getHttpServer())
+      .get('/auth/google/callback')
+      .expect(302);
+
+    expect(response.headers['location']).toContain('/onboarding');
+    const cookies = getSetCookies(response);
+    expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
+    expect(cookies.some((c) => c.startsWith(REFRESH_TOKEN_COOKIE))).toBe(true);
+  });
+
+  it('GET /auth/google/callback links Google to an existing email account', async () => {
+    await usersService.create({
+      email: googleProfile.email,
+      password: 'SomeHash',
+      first_name: googleProfile.firstName,
+      last_name: googleProfile.lastName,
+      country: 'Nigeria',
+      profile_pic_url: undefined,
+    });
+
+    const response = await request(app.getHttpServer())
+      .get('/auth/google/callback')
+      .expect(302);
+
+    expect(response.headers['location']).toContain('/onboarding');
+    const cookies = getSetCookies(response);
+    expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
+
+    const linked = await usersService.findOAuthAccount(
+      'google',
+      googleProfile.providerId,
+    );
+    expect(linked).not.toBeNull();
+  });
+
+  it('GET /auth/google/callback creates a brand-new user on first login', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/auth/google/callback')
+      .expect(302);
+
+    expect(response.headers['location']).toContain('/onboarding');
+    const cookies = getSetCookies(response);
+    expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
+
+    const newUser = await usersService.findByEmail(googleProfile.email);
+    expect(newUser).not.toBeNull();
+    expect(newUser?.is_verified).toBe(true);
+    expect(newUser?.first_name).toBe(googleProfile.firstName);
   });
 });
