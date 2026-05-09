@@ -4,6 +4,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -92,6 +93,8 @@ interface IssuedPasswordResetToken {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -215,14 +218,21 @@ export class AuthService {
     const user = await this.usersService.findByEmail(email);
 
     if (user) {
-      const issued = await this.issuePasswordResetToken(user.id);
-      const resetLink = this.buildPasswordResetLink(issued.token);
-      await this.mailService.sendPasswordReset({
-        to: user.email,
-        token: issued.token,
-        expiresAt: issued.expiresAt,
-        ...(resetLink ? { resetLink } : {}),
-      });
+      try {
+        const issued = await this.issuePasswordResetToken(user.id);
+        const resetLink = this.buildPasswordResetLink(issued.token);
+        await this.mailService.sendPasswordReset({
+          to: user.email,
+          token: issued.token,
+          expiresAt: issued.expiresAt,
+          ...(resetLink ? { resetLink } : {}),
+        });
+      } catch (err) {
+        this.logger.error(
+          `Forgot-password side effects failed for ${user.email}`,
+          err instanceof Error ? err.stack : err,
+        );
+      }
     }
 
     return {
@@ -370,41 +380,40 @@ export class AuthService {
   private async issuePasswordResetToken(
     userId: string,
   ): Promise<IssuedPasswordResetToken> {
-    await this.invalidateActivePasswordResetTokensForUser(userId);
-
     const token = randomBytes(32).toString('base64url');
     const tokenLookupHash = this.passwordResetLookupHash(token);
     const expiresAt = new Date(
       Date.now() + parseDurationToMs(env.PASSWORD_RESET_EXPIRES_IN),
     );
+    const tokenHash = await argon2.hash(token);
 
-    const row = this.passwordResetTokenRepository.create({
-      userId,
-      tokenLookupHash,
-      tokenHash: await argon2.hash(token),
-      expiresAt,
-      usedAt: null,
-    });
-    await this.passwordResetTokenRepository.save(row);
+    await this.passwordResetTokenRepository.manager.transaction(
+      async (manager) => {
+        await manager
+          .createQueryBuilder()
+          .update(PasswordResetToken)
+          .set({ usedAt: () => 'CURRENT_TIMESTAMP' })
+          .where('user_id = :userId', { userId })
+          .andWhere('used_at IS NULL')
+          .andWhere('expires_at > NOW()')
+          .execute();
+
+        const row = manager.create(PasswordResetToken, {
+          userId,
+          tokenLookupHash,
+          tokenHash,
+          expiresAt,
+          usedAt: null,
+        });
+        await manager.save(row);
+      },
+    );
 
     return { token, expiresAt };
   }
 
   private passwordResetLookupHash(token: string): string {
     return createHash('sha256').update(token, 'utf8').digest('hex');
-  }
-
-  private async invalidateActivePasswordResetTokensForUser(
-    userId: string,
-  ): Promise<void> {
-    await this.passwordResetTokenRepository
-      .createQueryBuilder()
-      .update(PasswordResetToken)
-      .set({ usedAt: () => 'CURRENT_TIMESTAMP' })
-      .where('user_id = :userId', { userId })
-      .andWhere('used_at IS NULL')
-      .andWhere('expires_at > NOW()')
-      .execute();
   }
 
   private toAuthUser(user: User): AuthUser {

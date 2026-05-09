@@ -15,10 +15,10 @@ export class FixUserOauthAccountConstraints1778312000000 implements MigrationInt
     );
 
     await queryRunner.query(
-      `CREATE UNIQUE INDEX IF NOT EXISTS "IDX_user_oauth_provider" ON "user_oauth_accounts" ("user_id", "provider")`,
+      `CREATE UNIQUE INDEX "IDX_user_oauth_provider" ON "user_oauth_accounts" ("user_id", "provider")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX IF NOT EXISTS "IDX_oauth_provider_external_id" ON "user_oauth_accounts" ("provider", "provider_id")`,
+      `CREATE UNIQUE INDEX "IDX_oauth_provider_external_id" ON "user_oauth_accounts" ("provider", "provider_id")`,
     );
   }
 
