@@ -177,6 +177,18 @@ class InMemoryUsersService {
     );
   }
 
+  async findOauthAccountWithUser(
+    provider: string,
+    providerId: string,
+  ): Promise<{ oauth: OAuthUser; user: User } | null> {
+    const found = this.oauthAccounts.find(
+      (a) => a.provider === provider && a.provider_id === providerId,
+    );
+    if (!found) return null;
+    const oauth = Object.assign(new OAuthUser(), found);
+    return { oauth, user: found.user };
+  }
+
   createOAuthAccount(
     userId: string,
     provider: string,
@@ -185,6 +197,37 @@ class InMemoryUsersService {
     const user = this.usersById.get(userId)!;
     this.oauthAccounts.push({ provider, provider_id, user });
     return Promise.resolve();
+  }
+
+  async linkOauthAccountToUser(
+    userId: string,
+    provider: string,
+    providerId: string,
+  ): Promise<void> {
+    const user = this.usersById.get(userId);
+    if (!user) throw new NotFoundException(`User ${userId} not found`);
+    this.oauthAccounts.push({ provider, provider_id: providerId, user });
+  }
+
+  async createVerifiedUserWithOauthLink(params: {
+    email: string;
+    first_name: string;
+    last_name: string;
+    country: string;
+    avatar_url: string | null;
+    provider: string;
+    providerId: string;
+  }): Promise<User> {
+    const result = await this.createOAuthUser(
+      params.provider,
+      params.providerId,
+      params.first_name,
+      params.last_name,
+      params.email,
+      'Unknown',
+      params.avatar_url,
+    );
+    return result.user;
   }
 
   async createOAuthUser(
@@ -245,6 +288,45 @@ class InMemoryUsersService {
       country as 'Unknown',
       avatar_url,
     );
+  }
+
+  async resolveOAuthUserFromProviderProfile(
+    provider: string,
+    profile: {
+      providerId: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      avatarUrl: string | null;
+    },
+  ): Promise<User> {
+    // Check if OAuth account already exists
+    const linked = await this.findOauthAccountWithUser(provider, profile.providerId);
+    if (linked) {
+      return linked.user;
+    }
+
+    // Check if user with email exists
+    const byEmail = await this.findByEmail(profile.email);
+    if (byEmail) {
+      // Mark as verified and link OAuth account
+      if (!byEmail.is_verified) {
+        await this.markVerified(byEmail.id);
+      }
+      await this.linkOauthAccountToUser(byEmail.id, provider, profile.providerId);
+      return this.findOne(byEmail.id);
+    }
+
+    // Create new user with OAuth link
+    return await this.createVerifiedUserWithOauthLink({
+      email: profile.email,
+      first_name: profile.firstName,
+      last_name: profile.lastName,
+      country: 'Unknown',
+      avatar_url: profile.avatarUrl,
+      provider,
+      providerId: profile.providerId,
+    });
   }
 }
 

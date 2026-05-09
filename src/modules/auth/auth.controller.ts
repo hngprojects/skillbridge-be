@@ -47,6 +47,7 @@ const linkedInCallbackQueryPipe = new ValidationPipe({
 });
 import type { GoogleProfile } from './strategies/google.strategy';
 import { env } from '../../config/env';
+import { UserRole } from '../users/entities/user.entity';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -152,11 +153,29 @@ export class AuthController {
   @Public()
   @Get('google')
   @UseGuards(GoogleOAuthGuard)
+  @ApiOperation({
+    summary: 'Initiate Google OAuth',
+    description: 'Redirects the browser to the Google consent screen.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to Google authorization',
+  })
   async googleAuth() {}
 
   @Public()
   @Get('google/callback')
   @UseGuards(GoogleOAuthGuard)
+  @ApiOperation({
+    summary: 'Google OAuth callback',
+    description:
+      'Handles the Google OAuth callback, creates or logs in the user, sets auth cookies, then redirects to the appropriate dashboard based on role and onboarding status.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description:
+      'Redirect to frontend: /candidate/onboarding or /employer/onboarding if setup incomplete; /discovery for employers, /admin for admins, or /dashboard for candidates if complete. Auth cookies set on this response.',
+  })
   async googleAuthRedirect(
     @Req() request: Request & { user: GoogleProfile },
     @Res() response: Response,
@@ -165,12 +184,20 @@ export class AuthController {
     setAuthCookies(response, result.tokens);
     const { role, onboardingComplete } = result.data.user;
 
-    // redirect based on role + onboarding
+    // redirect based on role + onboarding status
     if (!onboardingComplete) {
-      return response.redirect(`${env.FRONTEND_URL}/onboarding`);
+      if (role === UserRole.EMPLOYER) {
+        return response.redirect(`${env.FRONTEND_URL}/employer/onboarding`);
+      }
+      return response.redirect(`${env.FRONTEND_URL}/candidate/onboarding`);
     }
-    if (role === 'employer') {
-      return response.redirect(`${env.FRONTEND_URL}/employer/dashboard`);
+
+    // onboarding complete - redirect to role-specific dashboard
+    if (role === UserRole.EMPLOYER) {
+      return response.redirect(`${env.FRONTEND_URL}/discovery`);
+    }
+    if (role === UserRole.ADMIN) {
+      return response.redirect(`${env.FRONTEND_URL}/admin`);
     }
     return response.redirect(`${env.FRONTEND_URL}/dashboard`);
   }

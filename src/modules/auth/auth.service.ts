@@ -13,9 +13,16 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { randomUUID, timingSafeEqual } from 'crypto';
-import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
+import type {
+  Request as ExpressRequest,
+  Response as ExpressResponse,
+} from 'express';
 import type { StringValue } from 'ms';
-import { env, linkedInHttpMaxBodyBytes, linkedInHttpTimeoutMs } from '../../config/env';
+import {
+  env,
+  linkedInHttpMaxBodyBytes,
+  linkedInHttpTimeoutMs,
+} from '../../config/env';
 import { MailService } from '../mail/mail.service';
 import { User, UserRole } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
@@ -33,10 +40,16 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { VerificationOtpSource } from './entities/verification-otp.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
-import { isAbortError, isRecord, LINKEDIN_ACCESS_TOKEN_URL, 
-  LINKEDIN_AUTHORIZATION_URL, LINKEDIN_OAUTH_SCOPES, 
-  LINKEDIN_USERINFO_URL, OAUTH_PROVIDER_LINKEDIN, 
-  parseLinkedInTokenResponse } from './linkedin-oauth.service';
+import {
+  isAbortError,
+  isRecord,
+  LINKEDIN_ACCESS_TOKEN_URL,
+  LINKEDIN_AUTHORIZATION_URL,
+  LINKEDIN_OAUTH_SCOPES,
+  LINKEDIN_USERINFO_URL,
+  OAUTH_PROVIDER_LINKEDIN,
+  parseLinkedInTokenResponse,
+} from './linkedin-oauth.service';
 import { GoogleProfile } from './strategies/google.strategy';
 
 export interface Organisation {
@@ -96,7 +109,7 @@ export interface OAuthProfilePayload {
   firstName: string;
   lastName: string;
   avatarUrl: string | null;
-
+}
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -218,46 +231,16 @@ export class AuthService {
   }
 
   async googleCallback(profile: GoogleProfile): Promise<AuthResult> {
-    const { email, firstName, lastName, picture, country, providerId } =
-      profile;
+    // Normalize GoogleProfile to OAuthProfilePayload format
+    const normalizedProfile: OAuthProfilePayload = {
+      providerId: profile.providerId,
+      email: profile.email,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      avatarUrl: profile.picture,
+    };
 
-    // Case 1: This Google account is already linked to a user → just log them in
-    const oauthAccount = await this.usersService.findOAuthAccount(
-      'google',
-      providerId,
-    );
-    if (oauthAccount) {
-      return this.issueTokens(oauthAccount.user, 'Login successful');
-    }
-
-    // Case 2: The email exists but wasn't linked to Google yet → link it now
-    const existingUser = await this.usersService.findByEmail(email);
-    if (existingUser) {
-      await this.usersService.createOAuthAccount(
-        existingUser.id,
-        'google',
-        providerId,
-      );
-
-      // Mark user as verified when linking OAuth (OAuth providers verify email)
-      const verifiedUser = existingUser.is_verified
-        ? existingUser
-        : await this.usersService.markVerified(existingUser.id);
-
-      return this.issueTokens(verifiedUser, 'Login successful');
-    }
-
-    // Case 3: Completely new user → create account and link OAuth atomically
-    const { user } = await this.usersService.findOrCreateAndLinkOAuthUser(
-      'google',
-      providerId,
-      firstName,
-      lastName,
-      email,
-      country,
-      picture,
-    );
-    return this.issueTokens(user, 'Login successful');
+    return this.finalizeOAuthLogin('google', normalizedProfile);
   }
 
   async refresh(
@@ -347,9 +330,7 @@ export class AuthService {
     const clientIdRaw = env.LINKEDIN_CLIENT_ID;
     const redirectUriRaw = env.LINKEDIN_REDIRECT_URI;
     if (!clientIdRaw || !redirectUriRaw) {
-      throw new ServiceUnavailableException(
-        'LinkedIn OAuth is not configured',
-      );
+      throw new ServiceUnavailableException('LinkedIn OAuth is not configured');
     }
 
     const state = randomUUID();
@@ -420,7 +401,7 @@ export class AuthService {
 
   /**
    * Returns OAuth row, auto-link by email, or new user.
-  */
+   */
   async finalizeOAuthLogin(
     provider: string,
     profile: OAuthProfilePayload,
@@ -531,7 +512,9 @@ export class AuthService {
         received += chunk.byteLength;
         if (received > maxBytes) {
           //await reader.cancel('Response body too large');
-          throw new PayloadTooLargeException('LinkedIn response body too large');
+          throw new PayloadTooLargeException(
+            'LinkedIn response body too large',
+          );
         }
         out += decoder.decode(chunk, { stream: true });
       }
