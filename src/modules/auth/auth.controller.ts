@@ -9,6 +9,7 @@ import {
   Req,
   Res,
   ValidationPipe,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -20,7 +21,7 @@ import {
   ApiTooManyRequestsResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import type { Request, Response } from 'express';
+import { type Request, type Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -31,6 +32,7 @@ import {
   setAuthCookies,
 } from './auth.cookies';
 import { AuthService } from './auth.service';
+import { GoogleOAuthGuard } from './guards/google-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
@@ -43,6 +45,8 @@ const linkedInCallbackQueryPipe = new ValidationPipe({
   transform: true,
   transformOptions: { enableImplicitConversion: false },
 });
+import type { GoogleProfile } from './strategies/google.strategy';
+import { env } from '../../config/env';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -143,6 +147,32 @@ export class AuthController {
     const result = await this.authService.login(dto);
     setAuthCookies(response, result.tokens);
     return this.authService.toResponse(result);
+  }
+
+  @Public()
+  @Get('google')
+  @UseGuards(GoogleOAuthGuard)
+  async googleAuth() {}
+
+  @Public()
+  @Get('google/callback')
+  @UseGuards(GoogleOAuthGuard)
+  async googleAuthRedirect(
+    @Req() request: Request & { user: GoogleProfile },
+    @Res() response: Response,
+  ) {
+    const result = await this.authService.googleCallback(request.user);
+    setAuthCookies(response, result.tokens);
+    const { role, onboardingComplete } = result.data.user;
+
+    // redirect based on role + onboarding
+    if (!onboardingComplete) {
+      return response.redirect(`${env.FRONTEND_URL}/onboarding`);
+    }
+    if (role === 'employer') {
+      return response.redirect(`${env.FRONTEND_URL}/employer/dashboard`);
+    }
+    return response.redirect(`${env.FRONTEND_URL}/dashboard`);
   }
 
   @Public()
