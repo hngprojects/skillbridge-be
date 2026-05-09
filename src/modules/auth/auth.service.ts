@@ -4,17 +4,26 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { randomUUID } from 'crypto';
+import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
 import type { StringValue } from 'ms';
 import { env } from '../../config/env';
 import { MailService } from '../mail/mail.service';
-import { User } from '../users/entities/user.entity';
+import { User, UserRole } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
+import {
+  clearLinkedInOAuthStateCookie,
+  LINKEDIN_OAUTH_STATE_COOKIE,
+  readCookie,
+  setAuthCookies,
+  setLinkedInOAuthStateCookie,
+} from './auth.cookies';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
@@ -37,7 +46,7 @@ export interface AuthUser {
   fullname: string;
   avatar_url: string | null;
   country: string;
-  role: string;
+  role: UserRole;
   is_verified: boolean;
   onboardingComplete: boolean;
 }
@@ -73,13 +82,58 @@ export interface VerifyEmailResult {
   tokens: AuthTokens;
 }
 
+/** Normalized profile used by OAuth callbacks (Google, LinkedIn, etc.). */
+export interface OAuthProfilePayload {
+  providerId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string | null;
+}
+
+export const OAUTH_PROVIDER_LINKEDIN = 'linkedin' as const;
+
 const LINKEDIN_AUTHORIZATION_URL =
   'https://www.linkedin.com/oauth/v2/authorization';
+const LINKEDIN_ACCESS_TOKEN_URL =
+  'https://www.linkedin.com/oauth/v2/accessToken';
+const LINKEDIN_USERINFO_URL = 'https://api.linkedin.com/v2/userinfo';
 /** Sign In with LinkedIn using OpenID Connect (member data v2). */
 const LINKEDIN_OAUTH_SCOPES = 'openid profile email';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Fetch `Response.json()` is typed as `any`; narrow to `unknown` for callers. */
+async function readFetchResponseJsonUnknown(
+  res: globalThis.Response,
+): Promise<unknown> {
+  return await res.json();
+}
+
+function parseLinkedInTokenResponse(body: unknown): {
+  access_token: string;
+  error?: string;
+  error_description?: string;
+} | null {
+  if (!isRecord(body)) return null;
+  const access_token = body.access_token;
+  if (typeof access_token !== 'string' || access_token.length === 0) {
+    return null;
+  }
+  const error = typeof body.error === 'string' ? body.error : undefined;
+  const error_description =
+    typeof body.error_description === 'string'
+      ? body.error_description
+      : undefined;
+  return { access_token, error, error_description };
+}
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -188,6 +242,10 @@ export class AuthService {
       });
     }
 
+    if (!user.password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
     const valid = await argon2.verify(user.password, dto.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
@@ -290,6 +348,179 @@ export class AuthService {
     return {
       authorizationUrl: `${LINKEDIN_AUTHORIZATION_URL}?${params.toString()}`,
       state,
+    };
+  }
+
+  applyLinkedInOAuthStart(response: ExpressResponse): void {
+    const start = this.createLinkedInOAuthStart();
+    setLinkedInOAuthStateCookie(response, start.state);
+    response.redirect(start.authorizationUrl);
+  }
+
+  async handleLinkedInOAuthCallback(
+    request: ExpressRequest,
+    response: ExpressResponse,
+    query: { code?: string; state?: string; error?: string },
+  ): Promise<void> {
+    const frontend = this.getFrontendOrigin();
+
+    const redirectWithError = (key: string): void => {
+      clearLinkedInOAuthStateCookie(response);
+      response.redirect(`${frontend}/login?error=${key}`);
+    };
+
+    if (query.error || !query.code || !query.state) {
+      redirectWithError('oauth_cancelled');
+      return;
+    }
+
+    try {
+      const result = await this.completeLinkedInOAuth({
+        code: query.code,
+        state: query.state,
+        stateCookie: readCookie(request, LINKEDIN_OAUTH_STATE_COOKIE),
+      });
+      clearLinkedInOAuthStateCookie(response);
+      setAuthCookies(response, result.tokens);
+      response
+        .status(HttpStatus.OK)
+        .json(
+          this.toResponse({
+            message: result.message,
+            data: result.data,
+          }),
+        );
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : JSON.stringify(error);
+      this.logger.warn(`LinkedIn OAuth callback failed: ${message}`);
+      redirectWithError('oauth_failed');
+    }
+  }
+
+  /**
+   * Shared OAuth resolution: returning OAuth row, auto-link by email, or new user.
+   * Use from provider-specific callbacks after you have a normalized profile.
+   */
+  async finalizeOAuthLogin(
+    provider: string,
+    profile: OAuthProfilePayload,
+  ): Promise<AuthResult> {
+    const user = await this.usersService.resolveOAuthUserFromProviderProfile(
+      provider,
+      profile,
+    );
+    return this.issueTokens(user, 'Login successful');
+  }
+
+  async completeLinkedInOAuth(params: {
+    code: string;
+    state: string;
+    stateCookie: string | undefined;
+  }): Promise<AuthResult> {
+    if (!params.stateCookie || params.state !== params.stateCookie) {
+      throw new BadRequestException('Invalid OAuth state');
+    }
+
+    const accessToken = await this.exchangeLinkedInCode(params.code);
+    const profile = await this.fetchLinkedInUserInfo(accessToken);
+    return this.finalizeOAuthLogin(OAUTH_PROVIDER_LINKEDIN, profile);
+  }
+
+  getFrontendOrigin(): string {
+    return env.CORS_ORIGIN.split(',')[0]?.trim() || 'http://localhost:3000';
+  }
+
+  private async exchangeLinkedInCode(code: string): Promise<string> {
+    const clientId = process.env.LINKEDIN_CLIENT_ID;
+    const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
+    const redirectUri = process.env.LINKEDIN_REDIRECT_URI;
+    if (!clientId || !clientSecret || !redirectUri) {
+      throw new ServiceUnavailableException(
+        'LinkedIn OAuth is not fully configured',
+      );
+    }
+
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+    });
+
+    const tokenResponse = await fetch(LINKEDIN_ACCESS_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+
+    const tokenBody = await readFetchResponseJsonUnknown(tokenResponse);
+    const tokenJson = parseLinkedInTokenResponse(tokenBody);
+
+    if (!tokenResponse.ok || !tokenJson) {
+      let errMsg = 'LinkedIn token exchange failed';
+      if (isRecord(tokenBody)) {
+        const fromBody =
+          typeof tokenBody.error_description === 'string'
+            ? tokenBody.error_description
+            : typeof tokenBody.error === 'string'
+              ? tokenBody.error
+              : undefined;
+        if (fromBody) errMsg = fromBody;
+      }
+      throw new BadRequestException(errMsg);
+    }
+
+    return tokenJson.access_token;
+  }
+
+  private async fetchLinkedInUserInfo(
+    accessToken: string,
+  ): Promise<OAuthProfilePayload> {
+    const profileResponse = await fetch(LINKEDIN_USERINFO_URL, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    const body = await readFetchResponseJsonUnknown(profileResponse);
+
+    if (!profileResponse.ok || !isRecord(body)) {
+      throw new BadRequestException('Failed to load LinkedIn profile');
+    }
+
+    const sub = typeof body.sub === 'string' ? body.sub : '';
+    const emailRaw = typeof body.email === 'string' ? body.email : '';
+    const given =
+      typeof body.given_name === 'string' ? body.given_name : undefined;
+    const family =
+      typeof body.family_name === 'string' ? body.family_name : undefined;
+    const name = typeof body.name === 'string' ? body.name : undefined;
+    const picture = typeof body.picture === 'string' ? body.picture : null;
+
+    if (!sub || !emailRaw) {
+      throw new BadRequestException('LinkedIn profile missing required fields');
+    }
+
+    let firstName = given ?? '';
+    let lastName = family ?? '';
+    if (!firstName && !lastName && name) {
+      const parts = name.trim().split(/\s+/);
+      firstName = parts[0] ?? 'User';
+      lastName = parts.slice(1).join(' ') || ' ';
+    }
+    if (!firstName) {
+      firstName = emailRaw.split('@')[0] ?? 'User';
+    }
+    if (!lastName) {
+      lastName = ' ';
+    }
+
+    return {
+      providerId: sub,
+      email: emailRaw.toLowerCase().trim(),
+      firstName,
+      lastName,
+      avatarUrl: picture,
     };
   }
 

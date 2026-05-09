@@ -59,6 +59,7 @@ export const env = createEnv({
     SEED_ADMIN_FULL_NAME: z.string().min(1).default('Admin User'),
 
     LINKEDIN_CLIENT_ID: z.string().min(1).optional(),
+    LINKEDIN_CLIENT_SECRET: z.string().min(1).optional(),
     LINKEDIN_REDIRECT_URI: z.string().url().optional(),
   },
   runtimeEnv: process.env,
