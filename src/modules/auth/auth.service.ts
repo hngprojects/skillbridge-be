@@ -229,7 +229,7 @@ export class AuthService {
         });
       } catch (err) {
         this.logger.error(
-          `Forgot-password side effects failed for ${user.email}`,
+          `Forgot-password side effects failed for ${this.redactEmailForLog(user.email)}`,
           err instanceof Error ? err.stack : err,
         );
       }
@@ -373,8 +373,17 @@ export class AuthService {
       return undefined;
     }
     const trimmed = base.replace(/\/$/, '');
-    const sep = trimmed.includes('?') ? '&' : '?';
-    return `${trimmed}${sep}token=${encodeURIComponent(token)}`;
+    const enc = encodeURIComponent(token);
+    const hashIdx = trimmed.indexOf('#');
+    if (hashIdx === -1) {
+      return `${trimmed}#token=${enc}`;
+    }
+    const withHash = trimmed.slice(0, hashIdx + 1);
+    const frag = trimmed.slice(hashIdx + 1);
+    if (!frag) {
+      return `${withHash}token=${enc}`;
+    }
+    return `${withHash}${frag}&token=${enc}`;
   }
 
   private async issuePasswordResetToken(
@@ -389,6 +398,14 @@ export class AuthService {
 
     await this.passwordResetTokenRepository.manager.transaction(
       async (manager) => {
+        const lockedUser = await manager.findOne(User, {
+          where: { id: userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!lockedUser) {
+          throw new Error('Password reset issuer: user row missing');
+        }
+
         await manager
           .createQueryBuilder()
           .update(PasswordResetToken)
@@ -414,6 +431,14 @@ export class AuthService {
 
   private passwordResetLookupHash(token: string): string {
     return createHash('sha256').update(token, 'utf8').digest('hex');
+  }
+
+  private redactEmailForLog(email: string): string {
+    const at = email.indexOf('@');
+    if (at <= 0) {
+      return '[redacted]';
+    }
+    return `***${email.slice(at)}`;
   }
 
   private toAuthUser(user: User): AuthUser {
