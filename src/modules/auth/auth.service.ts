@@ -15,7 +15,7 @@ import * as argon2 from 'argon2';
 import { randomUUID } from 'crypto';
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
 import type { StringValue } from 'ms';
-import { env } from '../../config/env';
+import { env, linkedInHttpMaxBodyBytes, linkedInHttpTimeoutMs } from '../../config/env';
 import { MailService } from '../mail/mail.service';
 import { User, UserRole } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
@@ -436,7 +436,7 @@ export class AuthService {
     const controller = new AbortController();
     const timer = setTimeout(() => {
       controller.abort();
-    }, env.LINKEDIN_HTTP_TIMEOUT_MS);
+    }, linkedInHttpTimeoutMs);
     try {
       const res = await fetch(url, { ...init, signal: controller.signal });
       clearTimeout(timer);
@@ -453,7 +453,7 @@ export class AuthService {
   private async linkedInReadResponseTextCapped(
     res: globalThis.Response,
   ): Promise<string> {
-    const maxBytes = env.LINKEDIN_HTTP_MAX_BODY_BYTES;
+    const maxBytes = linkedInHttpMaxBodyBytes;
     if (res.body === null) {
       return '';
     }

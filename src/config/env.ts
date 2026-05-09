@@ -111,4 +111,10 @@ linkedInOAuthEnvTrioSchema.parse({
   LINKEDIN_REDIRECT_URI: env.LINKEDIN_REDIRECT_URI,
 });
 
+/**
+ * ESLint safe
+ */
+export const linkedInHttpTimeoutMs: number = env.LINKEDIN_HTTP_TIMEOUT_MS;
+export const linkedInHttpMaxBodyBytes: number = env.LINKEDIN_HTTP_MAX_BODY_BYTES;
+
 export type Env = typeof env;
