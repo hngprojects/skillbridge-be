@@ -110,11 +110,12 @@ export class AuthController {
   @ApiOperation({
     summary: 'LinkedIn OAuth callback',
     description:
-      'Exchanges the code and sets auth cookies. On success, returns the same JSON shape as POST /auth/login (client decides routing using user.onboardingComplete, etc.).',
+      'Exchanges the code, sets auth cookies, then redirects to Post-login Redirect Logic paths (/onboarding/role-select, /dashboard, /discovery, or /admin).',
   })
   @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Same body contract as login: status, message, data.user, data.organisations',
+    status: HttpStatus.FOUND,
+    description:
+      'Redirect to SPA: /onboarding/role-select if onboarding incomplete; else /dashboard (candidate), /discovery (employer), or /admin (admin). Auth cookies set on this response.',
   })
   async linkedInCallback(
     @Req() req: Request,
