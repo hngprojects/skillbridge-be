@@ -41,6 +41,12 @@ export class AlignUsersWithAuthContract1777480000000 implements MigrationInterfa
         isNullable: false,
       }),
     ]);
+
+    // Backfill existing rows so pre-migration users are not locked out by
+    // verification/onboarding gates introduced after this migration.
+    await queryRunner.query(
+      `UPDATE "users" SET "is_verified" = true, "onboarding_complete" = true`,
+    );
     await queryRunner.query(
       `UPDATE "users" SET "country" = 'Unknown' WHERE "country" IS NULL`,
     );
