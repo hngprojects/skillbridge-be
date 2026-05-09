@@ -34,4 +34,22 @@ export class MailService {
 
     return data;
   }
+
+  async sendVerificationOtp(params: {
+    to: string;
+    otp: string;
+    expiresAt: Date;
+  }) {
+    const expiresInMinutes = Math.max(
+      1,
+      Math.ceil((params.expiresAt.getTime() - Date.now()) / (60 * 1000)),
+    );
+
+    return this.send({
+      to: params.to,
+      subject: 'Verify your SkillBridge email',
+      text: `Your SkillBridge verification code is ${params.otp}. It expires in ${expiresInMinutes} minute(s).`,
+      html: `<p>Your SkillBridge verification code is <strong>${params.otp}</strong>.</p><p>It expires in ${expiresInMinutes} minute(s).</p>`,
+    });
+  }
 }

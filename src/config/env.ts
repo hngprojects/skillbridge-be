@@ -1,12 +1,22 @@
 import { createEnv } from '@t3-oss/env-core';
 import * as dotenv from 'dotenv';
 import { z } from 'zod';
+import { parseDurationToMs } from './duration';
 
 dotenv.config();
 
 const booleanString = z
   .union([z.boolean(), z.enum(['true', 'false'])])
   .transform((v) => v === true || v === 'true');
+
+const durationString = (defaultValue: string) =>
+  z
+    .string()
+    .default(defaultValue)
+    .transform((value) => {
+      parseDurationToMs(value);
+      return value;
+    });
 
 export const env = createEnv({
   server: {
@@ -28,11 +38,17 @@ export const env = createEnv({
     JWT_ACCESS_SECRET: z
       .string()
       .min(32, 'JWT_ACCESS_SECRET must be at least 32 chars'),
-    JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
+    JWT_ACCESS_EXPIRES_IN: durationString('15m'),
     JWT_REFRESH_SECRET: z
       .string()
       .min(32, 'JWT_REFRESH_SECRET must be at least 32 chars'),
-    JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+    JWT_REFRESH_EXPIRES_IN: durationString('7d'),
+    VERIFICATION_OTP_EXPIRES_IN: durationString('15m'),
+    VERIFICATION_RESEND_LIMIT_PER_HOUR: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(3),
 
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
     SWAGGER_ENABLED: booleanString.default(true),
