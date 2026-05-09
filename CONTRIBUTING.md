@@ -124,9 +124,25 @@ Before opening a PR:
 PR expectations:
 
 - Describe **what** changed and **why**.
+- Break the work into the concrete tasks it covered.
+- Explain **how** the work was implemented, not just the end result.
+- Call out important trade-offs, constraints, or alternative approaches considered.
 - Link related issues or discussions.
 - Mark as **draft** if work is incomplete.
 - Be responsive to review feedback.
+- Include evidence that the feature works end-to-end:
+  - screenshots for UI changes
+  - a short screen recording or video for flows that are easier to verify interactively
+  - test output or logs showing the relevant checks passed
+
+Recommended PR structure:
+
+1. Problem statement
+2. Task breakdown
+3. Implementation details
+4. Trade-offs and constraints
+5. Testing and evidence
+6. Related issue(s)
 
 ## Reporting issues
 
