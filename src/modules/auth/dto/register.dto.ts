@@ -1,7 +1,9 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
+import { Transform, type TransformFnParams } from 'class-transformer';
 import { IsIn, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { CreateUserDto } from '../../users/dto/create-user.dto';
 import { UserRole } from '../../users/entities/user.entity';
+import { normalizeOAuthSignupRole } from '../oauth-signup-role';
 
 class RegisterBaseDto extends PickType(CreateUserDto, [
   'email',
@@ -23,9 +25,13 @@ export class RegisterDto extends RegisterBaseDto {
   @Matches(/\S/, { message: 'lastName must not be empty' })
   lastName: string;
 
-  @ApiProperty({ enum: [UserRole.CANDIDATE, UserRole.EMPLOYER] })
-  @IsIn([UserRole.CANDIDATE, UserRole.EMPLOYER], {
+  @ApiProperty({ enum: [UserRole.TALENT, UserRole.EMPLOYER] })
+  @Transform(({ value }: TransformFnParams): string | undefined => {
+    const rawRole = typeof value === 'string' ? value : undefined;
+    return normalizeOAuthSignupRole(rawRole) ?? rawRole;
+  })
+  @IsIn([UserRole.TALENT, UserRole.EMPLOYER], {
     message: 'role must be either talent or employer',
   })
-  role: UserRole.CANDIDATE | UserRole.EMPLOYER;
+  role: UserRole.TALENT | UserRole.EMPLOYER;
 }
