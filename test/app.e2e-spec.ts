@@ -15,9 +15,7 @@ describe('Health (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [HealthModule],
       controllers: [ProbeController, WelcomeController],
-      providers: [
-        { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
-      ],
+      providers: [{ provide: APP_INTERCEPTOR, useClass: TransformInterceptor }],
     }).compile();
 
     app = moduleFixture.createNestApplication();

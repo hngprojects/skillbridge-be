@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ExecutionContext,
   INestApplication,
   NotFoundException,
   ValidationPipe,
@@ -7,10 +8,13 @@ import {
 import { JwtModule } from '@nestjs/jwt';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PassportModule } from '@nestjs/passport';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
 import request from 'supertest';
-import { App, Response } from 'supertest/types';
+import { App } from 'supertest/types';
+import { Response } from 'supertest';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor';
 import { env } from '../src/config/env';
@@ -19,7 +23,15 @@ import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
-import { AuthService } from '../src/modules/auth/auth.service';
+import {
+  AuthService,
+  FORGOT_PASSWORD_SUCCESS_MESSAGE,
+} from '../src/modules/auth/auth.service';
+import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
+import { PasswordResetDeliveryService } from '../src/modules/auth/password-reset-delivery.service';
+import { GoogleOAuthGuard } from '../src/modules/auth/guards/google-auth.guard';
+import type { GoogleProfile } from '../src/modules/auth/strategies/google.strategy';
+import { OAuthUser } from '../src/modules/users/entities/user-oauth.entity';
 import { VerificationOtpSource } from '../src/modules/auth/entities/verification-otp.entity';
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
 import { JwtStrategy } from '../src/modules/auth/strategies/jwt.strategy';
@@ -27,8 +39,10 @@ import {
   IssuedVerificationOtp,
   VerificationOtpService,
 } from '../src/modules/auth/verification-otp.service';
+import { PasswordResetQueueService } from '../src/modules/auth/password-reset-queue.service';
 import { MailService } from '../src/modules/mail/mail.service';
 import { CreateUserDto } from '../src/modules/users/dto/create-user.dto';
+import { UpdateUserDto } from '../src/modules/users/dto/update-user.dto';
 import { User, UserRole } from '../src/modules/users/entities/user.entity';
 import { UsersService } from '../src/modules/users/users.service';
 
@@ -38,6 +52,7 @@ type RegisterPayload = {
   email: string;
   country: string;
   password: string;
+  role: UserRole.CANDIDATE | UserRole.EMPLOYER;
 };
 
 type LoginPayload = {
@@ -60,6 +75,7 @@ const registerPayload: RegisterPayload = {
   email: 'jane@example.com',
   country: 'Nigeria',
   password: 'StrongPass123',
+  role: UserRole.CANDIDATE,
 };
 
 const loginPayload: LoginPayload = {
@@ -87,7 +103,7 @@ class InMemoryUsersService {
       avatar_url: dto.profile_pic_url ?? null,
       is_verified: false,
       onboarding_complete: false,
-      role: UserRole.CANDIDATE,
+      role: dto.role ?? UserRole.CANDIDATE,
       refreshTokenHash: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -136,6 +152,144 @@ class InMemoryUsersService {
 
     user.refreshTokenHash = nextHash;
     return Promise.resolve(true);
+  }
+
+  async update(id: string, dto: UpdateUserDto): Promise<User> {
+    const user = await this.findOne(id);
+    const { profile_pic_url: profilePicUrl, ...rest } = dto as UpdateUserDto & {
+      profile_pic_url?: string;
+    };
+    Object.assign(user, rest);
+    if (profilePicUrl !== undefined) user.avatar_url = profilePicUrl;
+    return user;
+  }
+
+  // ── OAuth helpers ──────────────────────────────────────────────────────
+  // A simple list of { provider, provider_id, user } records
+  private readonly oauthAccounts: Array<{
+    provider: string;
+    provider_id: string;
+    user: User;
+  }> = [];
+
+  async findOauthAccountWithUser(
+    provider: string,
+    providerId: string,
+  ): Promise<{ oauth: OAuthUser; user: User } | null> {
+    const found = this.oauthAccounts.find(
+      (a) => a.provider === provider && a.provider_id === providerId,
+    );
+    if (!found) return null;
+    const oauth = Object.assign(new OAuthUser(), found);
+    return { oauth, user: found.user };
+  }
+
+  async linkOauthAccountToUser(
+    userId: string,
+    provider: string,
+    providerId: string,
+  ): Promise<void> {
+    const user = this.usersById.get(userId);
+    if (!user) throw new NotFoundException(`User ${userId} not found`);
+    this.oauthAccounts.push({ provider, provider_id: providerId, user });
+  }
+
+  async createVerifiedUserWithOauthLink(params: {
+    email: string;
+    first_name: string;
+    last_name: string;
+    country: string;
+    avatar_url: string | null;
+    provider: string;
+    providerId: string;
+  }): Promise<User> {
+    const result = await this.createOAuthUser(
+      params.provider,
+      params.providerId,
+      params.first_name,
+      params.last_name,
+      params.email,
+      'Unknown',
+      params.avatar_url,
+    );
+    return result.user;
+  }
+
+  async createOAuthUser(
+    provider: string,
+    provider_id: string,
+    first_name: string,
+    last_name: string,
+    email: string,
+    country: 'Unknown',
+    avatar_url?: string | null,
+  ): Promise<{ user: User; oauthUser: OAuthUser }> {
+    const user = Object.assign(new User(), {
+      id: `user-${this.nextId++}`,
+      email,
+      password: null,
+      first_name,
+      last_name,
+      country,
+      avatar_url: avatar_url ?? null,
+      is_verified: true,
+      onboarding_complete: false,
+      role: UserRole.CANDIDATE,
+      refreshTokenHash: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+    });
+
+    this.usersById.set(user.id, user);
+    this.usersByEmail.set(user.email, user);
+    this.oauthAccounts.push({ provider, provider_id, user });
+
+    const oauthUser = Object.assign(new OAuthUser(), {
+      provider,
+      provider_id,
+      user,
+    });
+    return { user, oauthUser };
+  }
+
+  async resolveOAuthUserFromProviderProfile(
+    provider: string,
+    profile: {
+      providerId: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      avatarUrl: string | null;
+    },
+  ): Promise<User> {
+    // Check if OAuth account already exists
+    const linked = await this.findOauthAccountWithUser(provider, profile.providerId);
+    if (linked) {
+      return linked.user;
+    }
+
+    // Check if user with email exists
+    const byEmail = await this.findByEmail(profile.email);
+    if (byEmail) {
+      // Mark as verified and link OAuth account
+      if (!byEmail.is_verified) {
+        await this.markVerified(byEmail.id);
+      }
+      await this.linkOauthAccountToUser(byEmail.id, provider, profile.providerId);
+      return this.findOne(byEmail.id);
+    }
+
+    // Create new user with OAuth link
+    return await this.createVerifiedUserWithOauthLink({
+      email: profile.email,
+      first_name: profile.firstName,
+      last_name: profile.lastName,
+      country: 'Unknown',
+      avatar_url: profile.avatarUrl,
+      provider,
+      providerId: profile.providerId,
+    });
   }
 }
 
@@ -227,6 +381,13 @@ class MockMailService {
     expiresAt: Date;
   }> = [];
 
+  readonly passwordResetMessages: Array<{
+    to: string;
+    token: string;
+    expiresAt: Date;
+    resetLink?: string;
+  }> = [];
+
   async sendVerificationOtp(params: {
     to: string;
     otp: string;
@@ -234,6 +395,16 @@ class MockMailService {
   }) {
     this.verificationMessages.push(params);
     return { id: `mail-${this.verificationMessages.length}` };
+  }
+
+  async sendPasswordReset(params: {
+    to: string;
+    token: string;
+    expiresAt: Date;
+    resetLink?: string;
+  }) {
+    this.passwordResetMessages.push(params);
+    return { id: `reset-mail-${this.passwordResetMessages.length}` };
   }
 }
 
@@ -248,6 +419,9 @@ const findCookie = (cookies: string[], name: string): string =>
 
 const cookiePair = (cookie: string): string => cookie.split(';')[0];
 
+/** Auth e2e uses isolated module; force inline queue so awaitIdleForTests() waits for work. */
+const savedRedisUrlForAuthE2e = env.REDIS_URL;
+
 const expectAuthCookies = (response: Response): string => {
   const cookies = getSetCookies(response);
   const accessCookie = findCookie(cookies, ACCESS_TOKEN_COOKIE);
@@ -261,21 +435,84 @@ const expectAuthCookies = (response: Response): string => {
   return cookies.map(cookiePair).join('; ');
 };
 
+const mockPasswordResetSave = jest.fn().mockResolvedValue(undefined);
+const mockPasswordResetInvalidateExecute = jest.fn().mockResolvedValue({
+  affected: 0,
+});
+
+const mockPasswordResetTokenRepository = {
+  create: jest.fn((row: unknown) => row),
+  save: mockPasswordResetSave,
+  findOne: jest.fn().mockResolvedValue(null),
+  createQueryBuilder: jest.fn(() => ({
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    execute: mockPasswordResetInvalidateExecute,
+  })),
+  manager: {
+    transaction: jest.fn(
+      async (
+        fn: (m: {
+          createQueryBuilder: () => {
+            update: jest.Mock;
+            set: jest.Mock;
+            where: jest.Mock;
+            andWhere: jest.Mock;
+            execute: jest.Mock;
+          };
+          findOne: jest.Mock;
+          create: jest.Mock;
+          save: jest.Mock;
+        }) => Promise<void>,
+      ) => {
+        const qb = {
+          update: jest.fn().mockReturnThis(),
+          set: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          execute: mockPasswordResetInvalidateExecute,
+        };
+        await fn({
+          createQueryBuilder: () => qb,
+          findOne: jest.fn(
+            async (Entity: unknown, opts?: { where?: { id?: string } }) => {
+              if (Entity === User && opts?.where?.id) {
+                return { id: opts.where.id };
+              }
+              return null;
+            },
+          ),
+          create: jest.fn((_entity: unknown, row: unknown) => row),
+          save: mockPasswordResetSave,
+        });
+      },
+    ),
+  },
+};
+
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
   let usersService: InMemoryUsersService;
   let verificationOtpService: InMemoryVerificationOtpService;
   let mailService: MockMailService;
+  let passwordResetQueue: PasswordResetQueueService;
 
   beforeEach(async () => {
+    jest.replaceProperty(env, 'REDIS_URL', undefined);
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
+        ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
         PassportModule.register({ defaultStrategy: 'jwt' }),
         JwtModule.register({ secret: env.JWT_ACCESS_SECRET }),
       ],
       controllers: [AuthController],
       providers: [
         AuthService,
+        PasswordResetDeliveryService,
+        PasswordResetQueueService,
         JwtStrategy,
         { provide: UsersService, useClass: InMemoryUsersService },
         {
@@ -283,6 +520,10 @@ describe('Auth (e2e)', () => {
           useClass: InMemoryVerificationOtpService,
         },
         { provide: MailService, useClass: MockMailService },
+        {
+          provide: getRepositoryToken(PasswordResetToken),
+          useValue: mockPasswordResetTokenRepository,
+        },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
         { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
@@ -303,10 +544,17 @@ describe('Auth (e2e)', () => {
     usersService = moduleFixture.get(UsersService);
     verificationOtpService = moduleFixture.get(VerificationOtpService);
     mailService = moduleFixture.get(MailService);
+    passwordResetQueue = moduleFixture.get(PasswordResetQueueService);
+    jest.clearAllMocks();
   });
 
   afterEach(async () => {
     if (app) await app.close();
+    if (savedRedisUrlForAuthE2e !== undefined) {
+      jest.replaceProperty(env, 'REDIS_URL', savedRedisUrlForAuthE2e);
+    } else {
+      jest.replaceProperty(env, 'REDIS_URL', undefined);
+    }
   });
 
   it('POST /auth/register creates an unverified user and sends an OTP without cookies', async () => {
@@ -323,8 +571,137 @@ describe('Auth (e2e)', () => {
 
     const createdUser = await usersService.findByEmail(registerPayload.email);
     expect(createdUser?.is_verified).toBe(false);
+    expect(createdUser?.role).toBe(registerPayload.role);
     expect(mailService.verificationMessages).toHaveLength(1);
     expect(mailService.verificationMessages[0]?.to).toBe(registerPayload.email);
+  });
+
+  it('POST /auth/forgot-password returns same 200 payload for unknown email and does not send mail', async () => {
+    const body = { email: 'missing@example.com' };
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send(body)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      status: 'success',
+      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+    });
+    expect(mailService.passwordResetMessages).toHaveLength(0);
+    expect(mockPasswordResetTokenRepository.save).not.toHaveBeenCalled();
+    expect(mockPasswordResetInvalidateExecute).not.toHaveBeenCalled();
+  });
+
+  it('POST /auth/forgot-password for existing user triggers token save and sends reset mail', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: registerPayload.email })
+      .expect(200);
+
+    await passwordResetQueue.awaitIdleForTests();
+
+    expect(response.body).toMatchObject({
+      status: 'success',
+      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+    });
+    expect(mockPasswordResetInvalidateExecute).toHaveBeenCalled();
+    expect(mockPasswordResetTokenRepository.save).toHaveBeenCalled();
+    expect(mailService.passwordResetMessages).toHaveLength(1);
+    expect(mailService.passwordResetMessages[0]?.to).toBe(
+      registerPayload.email,
+    );
+    expect(mailService.passwordResetMessages[0]?.token?.length).toBeGreaterThan(
+      10,
+    );
+  });
+
+  it('POST /auth/forgot-password sets reset link with fragment token when PASSWORD_RESET_WEB_BASE_URL is set', async () => {
+    jest.replaceProperty(
+      env,
+      'PASSWORD_RESET_WEB_BASE_URL',
+      'https://example.com/reset',
+    );
+    try {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send(registerPayload)
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email: registerPayload.email })
+        .expect(200);
+
+      await passwordResetQueue.awaitIdleForTests();
+
+      const link = mailService.passwordResetMessages[0]?.resetLink;
+      expect(link).toBeDefined();
+      expect(link).toMatch(/^https:\/\/example\.com\/reset#token=/);
+    } finally {
+      jest.replaceProperty(env, 'PASSWORD_RESET_WEB_BASE_URL', undefined);
+    }
+  });
+
+  it('POST /auth/forgot-password returns 429 after 5 requests in the same minute from the same client', async () => {
+    const body = { email: 'nobody-for-rate-limit@example.com' };
+    for (let i = 0; i < 5; i++) {
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send(body)
+        .expect(200);
+    }
+    const sixth = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send(body)
+      .expect(429);
+
+    expect(sixth.body).toMatchObject({
+      success: false,
+      status_code: 429,
+    });
+  });
+
+  it('POST /auth/reset-password returns 400 when passwords do not match', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({
+        token: 'dummy-token',
+        password: 'StrongPass123',
+        confirmPassword: 'OtherPass999',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      success: false,
+      status_code: 400,
+    });
+    const msg = response.body.message;
+    const messages = Array.isArray(msg) ? msg : [msg];
+    expect(messages).toEqual(
+      expect.arrayContaining(['Passwords do not match']),
+    );
+  });
+
+  it('POST /auth/register persists the selected employer role', async () => {
+    const employerPayload: RegisterPayload = {
+      ...registerPayload,
+      email: 'employer@example.com',
+      role: UserRole.EMPLOYER,
+    };
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(employerPayload)
+      .expect(201);
+
+    const createdUser = await usersService.findByEmail(employerPayload.email);
+    expect(createdUser?.role).toBe(UserRole.EMPLOYER);
   });
 
   it('POST /auth/register rejects duplicate emails', async () => {
@@ -391,7 +768,7 @@ describe('Auth (e2e)', () => {
         last_name: registerPayload.lastName,
         fullname: `${registerPayload.firstName} ${registerPayload.lastName}`,
         country: registerPayload.country,
-        role: UserRole.CANDIDATE,
+        role: registerPayload.role,
         is_verified: true,
         onboardingComplete: false,
       },
@@ -569,5 +946,147 @@ describe('Auth (e2e)', () => {
       .post('/auth/refresh')
       .set('Cookie', refreshCookieHeader)
       .expect(401);
+  });
+});
+
+// github-callback endpoint test
+const googleProfile: GoogleProfile = {
+  email: 'google-user@example.com',
+  firstName: 'Google',
+  lastName: 'User',
+  picture: 'https://example.com/photo.jpg',
+  providerId: 'google-provider-123',
+  country: 'Unknown',
+};
+
+class FakeGoogleOAuthGuard {
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest();
+    req.user = googleProfile;
+    return true;
+  }
+}
+
+describe('Google OAuth callback (e2e)', () => {
+  let app: INestApplication<App>;
+  let usersService: InMemoryUsersService;
+
+  beforeEach(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [
+        ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
+        PassportModule.register({ defaultStrategy: 'jwt' }),
+        JwtModule.register({ secret: env.JWT_ACCESS_SECRET }),
+      ],
+      controllers: [AuthController],
+      providers: [
+        AuthService,
+        JwtStrategy,
+        { provide: UsersService, useClass: InMemoryUsersService },
+        {
+          provide: VerificationOtpService,
+          useClass: InMemoryVerificationOtpService,
+        },
+        { provide: MailService, useClass: MockMailService },
+        {
+          provide: getRepositoryToken(PasswordResetToken),
+          useValue: mockPasswordResetTokenRepository,
+        },
+        {
+          provide: PasswordResetQueueService,
+          useValue: {
+            enqueue: jest.fn(),
+            awaitIdleForTests: jest.fn().mockResolvedValue(undefined),
+            onModuleDestroy: jest.fn(),
+            onModuleInit: jest.fn(),
+          },
+        },
+        { provide: APP_GUARD, useClass: JwtAuthGuard },
+        { provide: APP_FILTER, useClass: HttpExceptionFilter },
+        { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
+        { provide: GoogleOAuthGuard, useClass: FakeGoogleOAuthGuard },
+      ],
+    })
+      .overrideGuard(GoogleOAuthGuard)
+      .useClass(FakeGoogleOAuthGuard)
+      .compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+        transformOptions: { enableImplicitConversion: false },
+      }),
+    );
+    await app.init();
+
+    usersService = moduleFixture.get(UsersService);
+  });
+
+  afterEach(async () => {
+    if (app) await app.close();
+  });
+
+  it('GET /auth/google/callback logs in a returning Google user (already linked)', async () => {
+    await usersService.createOAuthUser(
+      'google',
+      googleProfile.providerId,
+      googleProfile.firstName,
+      googleProfile.lastName,
+      googleProfile.email,
+      'Unknown',
+      googleProfile.picture,
+    );
+
+    const response = await request(app.getHttpServer())
+      .get('/auth/google/callback')
+      .expect(302);
+
+    expect(response.headers['location']).toContain('/onboarding');
+    const cookies = getSetCookies(response);
+    expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
+    expect(cookies.some((c) => c.startsWith(REFRESH_TOKEN_COOKIE))).toBe(true);
+  });
+
+  it('GET /auth/google/callback links Google to an existing email account', async () => {
+    await usersService.create({
+      email: googleProfile.email,
+      password: 'SomeHash',
+      first_name: googleProfile.firstName,
+      last_name: googleProfile.lastName,
+      country: 'Nigeria',
+      profile_pic_url: undefined,
+    });
+
+    const response = await request(app.getHttpServer())
+      .get('/auth/google/callback')
+      .expect(302);
+
+    expect(response.headers['location']).toContain('/onboarding');
+    const cookies = getSetCookies(response);
+    expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
+
+    const linked = await usersService.findOauthAccountWithUser(
+      'google',
+      googleProfile.providerId,
+    );
+    expect(linked).not.toBeNull();
+  });
+
+  it('GET /auth/google/callback creates a brand-new user on first login', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/auth/google/callback')
+      .expect(302);
+
+    expect(response.headers['location']).toContain('/onboarding');
+    const cookies = getSetCookies(response);
+    expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
+
+    const newUser = await usersService.findByEmail(googleProfile.email);
+    expect(newUser).not.toBeNull();
+    expect(newUser?.is_verified).toBe(true);
+    expect(newUser?.first_name).toBe(googleProfile.firstName);
   });
 });

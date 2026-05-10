@@ -33,6 +33,20 @@ Table verification_otps {
   created_at timestamp [not null, default: `now()`]
 }
 
+Table password_reset_tokens {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: > users.id, not null]
+  token_lookup_hash varchar(64) [unique, not null, note: 'SHA-256 hex of token']
+  token_hash varchar(255) [not null]
+  expires_at timestamp [not null]
+  used_at timestamp
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    (user_id, used_at, expires_at) [name: 'IDX_password_reset_tokens_user_used_expires', note: 'active-token invalidation lookup']
+  }
+}
+
 Table waitlist_entries {
   id uuid [pk, default: `gen_random_uuid()`]
   email varchar(255) [unique, not null]
@@ -48,11 +62,12 @@ Table contact_messages {
   created_at timestamp [not null, default: `now()`]
 }
 
-Table talent_profiles {
+Table candidate_profiles {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [ref: - users.id, not null]
   role_track varchar [not null, note: 'frontend | data | design | etc']
-  status talent_status [not null, default: 'in_progress', note: 'in_progress | not_ready | emerging | job_ready']
+  status talent_status [not null, default: 'not_started', note: 'not_started | in_progress | not_ready | emerging | job_ready']
+  bio text
   is_published boolean [default: false]
   profile_share_link varchar [unique]
   published_at timestamp
@@ -66,13 +81,16 @@ Table employer_profiles {
   company_name varchar [not null]
   company_size varchar
   industry varchar
+  website_url varchar
+  company_description text
+  hiring_region varchar
   created_at timestamp [default: `now()`]
   updated_at timestamp [default: `now()`]
 }
 
 Table assessments {
   id uuid [pk, default: `gen_random_uuid()`]
-  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  candidate_profile_id uuid [ref: > candidate_profiles.id, not null]
   attempt_number int [not null, default: 1]
   status assessment_status [not null, default: 'in_progress', note: 'in_progress | completed | flagged']
   tab_switch_flagged boolean [default: false]
@@ -100,7 +118,7 @@ Table assessment_responses {
 
 Table task_submissions {
   id uuid [pk, default: `gen_random_uuid()`]
-  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  candidate_profile_id uuid [ref: > candidate_profiles.id, not null]
   assessment_id uuid [ref: - assessments.id, not null]
   file_url varchar
   external_link varchar
@@ -113,7 +131,7 @@ Table task_submissions {
 
 Table interviews {
   id uuid [pk, default: `gen_random_uuid()`]
-  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  candidate_profile_id uuid [ref: > candidate_profiles.id, not null]
   assessment_id uuid [ref: - assessments.id, not null]
   format interview_format [note: 'sync | live']
   scheduled_at timestamp
@@ -125,7 +143,7 @@ Table interviews {
 
 Table composite_scores {
   id uuid [pk, default: `gen_random_uuid()`]
-  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  candidate_profile_id uuid [ref: > candidate_profiles.id, not null]
   assessment_id uuid [ref: - assessments.id, not null]
   technical_score float [note: 'weight: 40%']
   task_score float [note: 'weight: 35%']
@@ -138,7 +156,7 @@ Table composite_scores {
 Table ai_guidance {
   id uuid [pk, default: `gen_random_uuid()`]
   composite_score_id uuid [ref: - composite_scores.id, not null]
-  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  candidate_profile_id uuid [ref: > candidate_profiles.id, not null]
   performance_gaps jsonb
   generated_at timestamp [default: `now()`]
 }
@@ -156,7 +174,7 @@ Table resources {
 
 Table checklist_items {
   id uuid [pk, default: `gen_random_uuid()`]
-  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  candidate_profile_id uuid [ref: > candidate_profiles.id, not null]
   resource_id uuid [ref: > resources.id, not null]
   is_completed boolean [default: false]
   completed_at timestamp
@@ -164,7 +182,7 @@ Table checklist_items {
 
 Table retake_windows {
   id uuid [pk, default: `gen_random_uuid()`]
-  talent_profile_id uuid [ref: - talent_profiles.id, not null]
+  candidate_profile_id uuid [ref: - candidate_profiles.id, not null]
   last_attempt_at timestamp [not null]
   eligible_retake_at timestamp [not null, note: 'last_attempt_at + 14 days']
   is_eligible boolean [default: false]
@@ -173,7 +191,7 @@ Table retake_windows {
 Table employer_contacts {
   id uuid [pk, default: `gen_random_uuid()`]
   employer_profile_id uuid [ref: > employer_profiles.id, not null]
-  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  candidate_profile_id uuid [ref: > candidate_profiles.id, not null]
   initiated_at timestamp [default: `now()`]
   status contact_status [not null, default: 'pending', note: 'pending | accepted | declined']
 }
@@ -181,7 +199,7 @@ Table employer_contacts {
 Table shortlists {
   id uuid [pk, default: `gen_random_uuid()`]
   employer_profile_id uuid [ref: > employer_profiles.id, not null]
-  talent_profile_id uuid [ref: > talent_profiles.id, not null]
+  candidate_profile_id uuid [ref: > candidate_profiles.id, not null]
   saved_at timestamp [default: `now()`]
 }
 
@@ -201,6 +219,7 @@ Enum user_role {
 }
 
 Enum talent_status {
+  not_started
   in_progress
   not_ready
   emerging
