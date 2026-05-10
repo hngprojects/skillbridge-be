@@ -2,7 +2,7 @@ name: CD
 
 on:
   push:
-    branches: [staging, main]
+    branches: [dev, staging, main]
 
 concurrency:
   group: cd-${{ github.ref_name }}
@@ -21,7 +21,12 @@ jobs:
       - name: Set deploy target
         id: target
         run: |
-          if [ "${{ github.ref_name }}" = "staging" ]; then
+          if [ "${{ github.ref_name }}" = "dev" ]; then
+            echo "dir=dev" >> "$GITHUB_OUTPUT"
+            echo "app=skillbridge-dev" >> "$GITHUB_OUTPUT"
+            echo "env_flag=dev" >> "$GITHUB_OUTPUT"
+            echo "environment=dev" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_name }}" = "staging" ]; then
             echo "dir=staging" >> "$GITHUB_OUTPUT"
             echo "app=skillbridge-staging" >> "$GITHUB_OUTPUT"
             echo "env_flag=staging" >> "$GITHUB_OUTPUT"
@@ -32,38 +37,47 @@ jobs:
             echo "env_flag=production" >> "$GITHUB_OUTPUT"
             echo "environment=production" >> "$GITHUB_OUTPUT"
           else
-            echo "::error::Unknown branch '${{ github.ref_name }}' — expected 'staging' or 'main'"
+            echo "::error::Unknown branch '${{ github.ref_name }}' — expected 'dev', 'staging', or 'main'"
             exit 1
           fi
 
       - name: Validate env secret
         env:
+          DOTENV_DEV: ${{ secrets.DEV_ENV }}
           DOTENV_STAGING: ${{ secrets.STAGING_ENV }}
           DOTENV_PRODUCTION: ${{ secrets.PRODUCTION_ENV }}
         run: |
           ENV="${{ steps.target.outputs.environment }}"
           if [ "$ENV" = "production" ]; then
             DOTENV="$DOTENV_PRODUCTION"
-          else
+          elif [ "$ENV" = "staging" ]; then
             DOTENV="$DOTENV_STAGING"
+          elif [ "$ENV" = "dev" ]; then
+            DOTENV="$DOTENV_DEV"
+          else
+            echo "::error::Unsupported environment '$ENV'"
+            exit 1
           fi
           if [ -z "$DOTENV" ]; then
             echo "::error::Environment secret for '$ENV' is empty or unset. Check GitHub repo secrets."
             exit 1
           fi
           echo "Environment secret is set (${#DOTENV} chars)"
+          {
+            echo "DOTENV<<EOF"
+            echo "$DOTENV"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         env:
-          DOTENV_STAGING: ${{ secrets.STAGING_ENV }}
-          DOTENV_PRODUCTION: ${{ secrets.PRODUCTION_ENV }}
+          DOTENV: ${{ env.DOTENV }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
-          envs: DOTENV_STAGING,DOTENV_PRODUCTION
-          script_stop: true
+          envs: DOTENV
           script: |
             set -e
 
@@ -72,13 +86,6 @@ jobs:
             ENV_FLAG="${{ steps.target.outputs.env_flag }}"
             REPO="https://github.com/${{ github.repository }}.git"
             BRANCH="${{ github.ref_name }}"
-
-            # Select the correct env file
-            if [ "$ENV_FLAG" = "production" ]; then
-              DOTENV="$DOTENV_PRODUCTION"
-            else
-              DOTENV="$DOTENV_STAGING"
-            fi
 
             if [ -z "$DOTENV" ]; then
               echo "FATAL: env secret for $ENV_FLAG is empty"
