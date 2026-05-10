@@ -14,8 +14,6 @@ import { OAuthUser } from './user-oauth-account.entity';
 export enum UserRole {
   ADMIN = 'admin',
   TALENT = 'talent',
-  /** @deprecated Use TALENT. */
-  CANDIDATE = 'candidate',
   EMPLOYER = 'employer',
 }
 

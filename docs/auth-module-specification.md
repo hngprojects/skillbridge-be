@@ -197,7 +197,10 @@ Tokens are never returned in the response body. The client reads the user object
 
 ```
 1. Read role + onboardingComplete from user object in response body
-2. If onboardingComplete = false → redirect to /onboarding/role-select (all roles)
+2. If onboardingComplete = false:
+   - candidate → redirect to /candidate/onboarding
+   - employer  → redirect to /employer/onboarding
+   - admin     → redirect to /admin
 3. If onboardingComplete = true:
    - talent → /dashboard
    - employer  → /discovery
@@ -239,19 +242,19 @@ const api = axios.create({
 
 ## Auth Flows
 
-There are two distinct signup/login paths. Both converge at the same onboarding step after account creation. Each is fully documented below so the team can implement them independently.
+There are two distinct auth paths from the first touchpoint: candidate and employer. They do not converge at a shared role-selection step after account creation. Each path stays role-specific through signup, OAuth continuation, and onboarding, and should be implemented that way end to end.
 
 ### At a glance
 
-|                     | Flow A — Email / Password                     | Flow B — OAuth (Google / LinkedIn)     |
-| ------------------- | --------------------------------------------- | -------------------------------------- |
-| Entry point         | Registration form                             | "Continue with Google/LinkedIn" button |
-| Fields collected    | firstName, lastName, email, password, role    | Pulled from provider profile           |
-| Email verification  | Manual — 15-minute OTP sent to inbox          | Automatic — provider pre-verifies      |
-| Password            | Required (Argon hashed, cost 12)              | Never set (`NULL`)                     |
-| Account conflict    | N/A                                           | Auto-link if email already exists      |
-| After signup        | Must verify email → then onboarding           | Straight to onboarding                 |
-| Onboarding required | Yes (all new users)                           | Yes (all new users)                    |
+|                       | Flow A — Email / Password                              | Flow B — OAuth (Google / LinkedIn)                 |
+| --------------------- | ------------------------------------------------------ | -------------------------------------------------- |
+| Entry point           | Registration form                                      | "Continue with Google/LinkedIn" button             |
+| Fields collected      | firstName, lastName, email, password, role             | Pulled from provider profile                       |
+| Email verification    | Manual — 15-minute OTP sent to inbox                  | Automatic — provider pre-verifies                  |
+| Password              | Required (Argon hashed, cost 12)                       | Never set (`NULL`)                                 |
+| Account conflict      | N/A                                                    | Auto-link if email already exists                  |
+| After signup          | Must verify email → then onboarding                   | Straight to onboarding                             |
+| Onboarding required   | Yes (all new users)                                    | Yes (all new users)                                |
 
 **Both paths issue the same JWT and set the same httpOnly refresh token cookie. Post-onboarding behaviour is identical regardless of how the user signed up.**
 
@@ -259,10 +262,10 @@ There are two distinct signup/login paths. Both converge at the same onboarding 
 
 ```
 Flow A — Email/Password
-  Register → Verify email → [Onboarding] → Dashboard
+  Register → Verify email → [Candidate or Employer Onboarding] → Dashboard/Discovery
 
 Flow B — OAuth
-  Click provider → Consent screen → Callback (auto-link or create) → [Onboarding if new] → Dashboard
+  Click provider → Consent screen → Callback (auto-link or create) → [Role-specific onboarding if new] → Dashboard/Discovery
 
 Both flows share:
   Token Refresh (Flow C)
@@ -313,8 +316,10 @@ POST /auth/verify-email
   │
   ├── Issue access token (JWT, 15min) + set refresh token cookie (httpOnly, 7 days)
   │
-  └── Response: 200 { status: "success", data: { id, email, onboardingComplete: false } }
-        → Client redirects to /onboarding/role-select
+  └── Response: 200 { status: "success", data: { id, email, role, onboardingComplete: false } }
+        → Client redirects by role:
+            candidate → /candidate/onboarding
+            employer  → /employer/onboarding
 ```
 
 #### A3. Login
@@ -334,8 +339,8 @@ POST /auth/login
   ├── Issue access token (JWT, 15min) + set refresh token cookie (httpOnly, 7 days)
   │
   └── Response: 200 { status: "success", data: { id, email, role, onboardingComplete } }
-        → Client reads onboardingComplete:
-            false → redirect to /onboarding/role-select
+        → Client reads role + onboardingComplete:
+            false → redirect to /candidate/onboarding or /employer/onboarding based on role
             true  → redirect to /dashboard or /discovery based on role
 ```
 
@@ -403,8 +408,8 @@ Provider redirects to:
   │   ── CASE 1: OAuth account found ──────────────────────────────────────────
   │   │   This is a returning OAuth user. Fetch the linked users row.
   │   │   Issue access token + set refresh cookie.
-  │   │   Response: **302** to `{CORS_ORIGIN}` + path from Post-login Redirect Logic; cookies set on response
-  │   │   (onboarding incomplete → `/onboarding/role-select`; else role → `/dashboard` | `/discovery` | `/admin`)
+  │   │   Response: **302** to frontend path from Post-login Redirect Logic; cookies set on response
+  │   │   (onboarding incomplete → `/candidate/onboarding` | `/employer/onboarding`; else role → `/dashboard` | `/discovery` | `/admin`)
   │   │
   │   └── OAuth account NOT found → check users WHERE email = $email
   │
@@ -417,15 +422,15 @@ Provider redirects to:
   │       │   Response: **302** to Post-login Redirect path; cookies set on response
   │       │
   │       │   ⚠ If onboardingComplete = false (edge case: user registered but never finished
-  │       │     onboarding) → redirect to /onboarding/role-select as usual.
+  │       │     onboarding) → redirect to the correct role-specific onboarding path as usual.
   │       │
   │       └── CASE 3: Email not found (brand new user) ──────────────────────
   │               INSERT INTO users:
   │                 { first_name, last_name, email, password: NULL,
-  │                   is_verified: true, onboarding_complete: false }
+  │                   role, is_verified: true, onboarding_complete: false }
   │               INSERT INTO user_oauth_accounts { user_id, provider, provider_id }
   │               Issue access token + set refresh cookie.
-  │               Response: **302** to `/onboarding/role-select` (new users); cookies set on response
+  │               Response: **302** to role-specific onboarding path for that user (new users); cookies set on response
 ```
 
 #### B3. Key differences from Email/Password flow
@@ -482,30 +487,33 @@ POST /auth/logout
 
 ---
 
-### Flow E — Onboarding (shared by both A and B)
+### Flow E — Onboarding (role-specific after A or B)
 
-All new users — regardless of signup method — must complete this step before accessing their dashboard. The JWT issued before this step has `onboardingComplete: false`. After this step it is reissued as `true`.
+All new users must complete their role-specific onboarding before accessing their final product surface. The JWT issued before this step has `onboardingComplete: false`. After this step it is reissued as `true`.
 
 ```
-POST /onboarding/role
-  │  Requires: access_token cookie
+POST /candidate/onboarding
+  │  Requires: access_token cookie for role = talent
   │
   ├── Validate onboardingComplete = false (if true → 403 { status: "error", message: "Already completed" })
   │
-  ├── IF role = "talent":
-  │     Validate roleTrack is present and valid
-  │     INSERT INTO candidates { user_id, role_track, status: "not_started" }
-  │     UPDATE users SET role = "talent", onboarding_complete = true
-  │
-  ├── IF role = "employer":
-  │     Validate companyName is present
-  │     INSERT INTO employers { user_id, company_name }
-  │     UPDATE users SET role = "employer", onboarding_complete = true
-  │
+  ├── Validate roleTrack is present and valid
+  ├── INSERT INTO candidate_profiles { user_id, role_track, status: "not_started" }
+  ├── UPDATE users SET onboarding_complete = true
   ├── Reissue access token cookie with updated payload:
-  │     { ..., role: "talent|employer", onboardingComplete: true }
+  │     { ..., role: "talent", onboardingComplete: true }
+  └── Response: 200 { redirectTo: "/dashboard" }
+
+POST /employer/onboarding
+  │  Requires: access_token cookie for role = employer
   │
-  └── Response: 200 { redirectTo: "/dashboard" | "/discovery" }
+  ├── Validate onboardingComplete = false (if true → 403 { status: "error", message: "Already completed" })
+  ├── Validate employer onboarding fields (companyName, etc.)
+  ├── INSERT INTO employer_profiles { user_id, company_name, ... }
+  ├── UPDATE users SET onboarding_complete = true
+  ├── Reissue access token cookie with updated payload:
+  │     { ..., role: "employer", onboardingComplete: true }
+  └── Response: 200 { redirectTo: "/discovery" }
 ```
 
 ---
@@ -573,7 +581,7 @@ Confirm email address using OTP.
 ```
 
 > Sets `access_token` and `refresh_token` as httpOnly cookies.
-> Client reads `onboardingComplete` from user object and redirects to `/onboarding/role-select`.
+> Client reads `role` and `onboardingComplete` from user object and redirects to the correct role-specific onboarding path.
 
 Verification OTPs expire after **15 minutes** by default (`VERIFICATION_OTP_EXPIRES_IN`, e.g. `15m` in `src/config/env.ts` / `.env`). `POST /auth/verify-email` rejects OTPs after `expires_at`. Resending issues a **new** OTP with a fresh **15-minute** window (previous unused OTPs for that user are invalidated).
 
@@ -696,9 +704,10 @@ If **all three** variables are **omitted**, the app still starts. In that case, 
 
 **Callback success response:**
 
-`302 Found` — `Location` is `{first CORS_ORIGIN}{path}` per **Post-login Redirect Logic**:
+`302 Found` — `Location` is `{FRONTEND_URL}{path}` per **Post-login Redirect Logic**:
 
-- `onboardingComplete === false` → `/onboarding/role-select`
+- `onboardingComplete === false` and `role === talent` → `/candidate/onboarding`
+- `onboardingComplete === false` and `role === employer` → `/employer/onboarding`
 - `onboardingComplete === true` and `role === talent` → `/dashboard`
 - `onboardingComplete === true` and `role === employer` → `/discovery`
 - `onboardingComplete === true` and `role === admin` → `/admin`
@@ -707,7 +716,7 @@ If **all three** variables are **omitted**, the app still starts. In that case, 
 
 **Callback error responses (browser redirect):**
 
-The callback is a full-page browser navigation. Failures use **`302 Found`** to **`{first CORS_ORIGIN}/login`** with an `error` query param and clear **`linkedin_oauth_state`**. Do **not** expect **`503` JSON** from the callback (including `ServiceUnavailableException` from token exchange — it is caught and mapped here).
+The callback is a full-page browser navigation. Failures use **`302 Found`** to **`{FRONTEND_URL}/login`** with an `error` query param and clear **`linkedin_oauth_state`**. Do **not** expect **`503` JSON** from the callback (including `ServiceUnavailableException` from token exchange — it is caught and mapped here).
 
 | Situation                                                                                                                                  | `Location` (relative to first CORS origin) |
 | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
