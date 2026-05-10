@@ -164,19 +164,6 @@ class InMemoryUsersService {
     user: User;
   }> = [];
 
-  findOAuthAccount(
-    provider: string,
-    provider_id: string,
-  ): Promise<OAuthUser | null> {
-    const found = this.oauthAccounts.find(
-      (a) => a.provider === provider && a.provider_id === provider_id,
-    );
-    // Return a minimal OAuthUser shape with the linked user attached
-    return Promise.resolve(
-      found ? Object.assign(new OAuthUser(), found) : null,
-    );
-  }
-
   async findOauthAccountWithUser(
     provider: string,
     providerId: string,
@@ -187,16 +174,6 @@ class InMemoryUsersService {
     if (!found) return null;
     const oauth = Object.assign(new OAuthUser(), found);
     return { oauth, user: found.user };
-  }
-
-  createOAuthAccount(
-    userId: string,
-    provider: string,
-    provider_id: string,
-  ): Promise<void> {
-    const user = this.usersById.get(userId)!;
-    this.oauthAccounts.push({ provider, provider_id, user });
-    return Promise.resolve();
   }
 
   async linkOauthAccountToUser(
@@ -266,28 +243,6 @@ class InMemoryUsersService {
       user,
     });
     return { user, oauthUser };
-  }
-
-  async findOrCreateAndLinkOAuthUser(
-    provider: string,
-    provider_id: string,
-    first_name: string,
-    last_name: string,
-    email: string,
-    country: string,
-    avatar_url?: string | null,
-  ): Promise<{ user: User; oauthUser: OAuthUser }> {
-    // In test environment, we can simply delegate to createOAuthUser
-    // since we don't need to handle concurrent requests
-    return this.createOAuthUser(
-      provider,
-      provider_id,
-      first_name,
-      last_name,
-      email,
-      country as 'Unknown',
-      avatar_url,
-    );
   }
 
   async resolveOAuthUserFromProviderProfile(
@@ -885,7 +840,7 @@ describe('Google OAuth callback (e2e)', () => {
     const cookies = getSetCookies(response);
     expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
 
-    const linked = await usersService.findOAuthAccount(
+    const linked = await usersService.findOauthAccountWithUser(
       'google',
       googleProfile.providerId,
     );
