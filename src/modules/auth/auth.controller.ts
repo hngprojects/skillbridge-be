@@ -5,9 +5,11 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
+  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -15,6 +17,7 @@ import {
   ApiCookieAuth,
   ApiForbiddenResponse,
   ApiOperation,
+  ApiResponse,
   ApiTooManyRequestsResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -35,6 +38,14 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { LinkedInCallbackQueryDto } from './dto/linkedin-callback-query.dto';
+
+const linkedInCallbackQueryPipe = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+  transformOptions: { enableImplicitConversion: false },
+});
 
 @ApiTags('auth')
 @Controller('auth')
@@ -77,6 +88,48 @@ export class AuthController {
   })
   async resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto);
+  }
+
+  @Public()
+  @Get('linkedin')
+  @ApiOperation({
+    summary: 'Initiate LinkedIn OAuth',
+    description: 'Redirects the browser to the LinkedIn consent screen.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to LinkedIn authorization',
+  })
+  @ApiResponse({
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    description: 'LinkedIn OAuth is not configured',
+  })
+  linkedIn(@Res() res: Response): void {
+    this.authService.applyLinkedInOAuthStart(res);
+  }
+
+  @Public()
+  @Get('linkedin/callback')
+  @ApiOperation({
+    summary: 'LinkedIn OAuth callback',
+    description:
+      'Exchanges the code, sets auth cookies, then redirects to the role-based onboarding or application path.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description:
+      'Redirect to SPA: /candidate/onboarding or /employer/onboarding when setup is incomplete; otherwise /dashboard, /discovery, or /admin. Auth cookies set on this response.',
+  })
+  async linkedInCallback(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query(linkedInCallbackQueryPipe) query: LinkedInCallbackQueryDto,
+  ): Promise<void> {
+    await this.authService.handleLinkedInOAuthCallback(req, res, {
+      code: query.code,
+      state: query.state,
+      error: query.error,
+    });
   }
 
   @Public()
