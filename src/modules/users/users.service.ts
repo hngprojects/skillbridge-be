@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -25,6 +24,7 @@ import { User, UserRole } from './entities/user.entity';
 import { OAuthUserModelAction } from './actions/user-oauth.action';
 import { OAuthUser } from './entities/user-oauth.entity';
 import type { OAuthSignupRole } from '../auth/oauth-signup-role';
+import { OAuthSignupRoleRequiredException } from '../auth/exceptions/oauth-signup-role-required.exception';
 
 const NO_TRANSACTION = {
   transactionOptions: { useTransaction: false as const },
@@ -279,7 +279,7 @@ export class UsersService {
 
     try {
       if (!signupRole) {
-        throw new BadRequestException('OAuth signup role required');
+        throw new OAuthSignupRoleRequiredException();
       }
       return await this.createVerifiedUserWithOauthLink({
         email: profile.email,
