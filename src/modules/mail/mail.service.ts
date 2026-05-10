@@ -1,10 +1,7 @@
 import { Injectable, Logger, forwardRef, Inject } from '@nestjs/common';
 import { Resend } from 'resend';
 import { env } from '../../config/env';
-import type {
-  PasswordResetEmailPayload,
-  SendMailOptions,
-} from './mail.types';
+import type { PasswordResetEmailPayload, SendMailOptions } from './mail.types';
 import { OutboundEmailQueueService } from './outbound-email-queue.service';
 
 @Injectable()

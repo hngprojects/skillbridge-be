@@ -21,7 +21,10 @@ import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
-import { AuthService, FORGOT_PASSWORD_SUCCESS_MESSAGE } from '../src/modules/auth/auth.service';
+import {
+  AuthService,
+  FORGOT_PASSWORD_SUCCESS_MESSAGE,
+} from '../src/modules/auth/auth.service';
 import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
 import { VerificationOtpSource } from '../src/modules/auth/entities/verification-otp.entity';
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
@@ -271,6 +274,9 @@ const findCookie = (cookies: string[], name: string): string =>
 
 const cookiePair = (cookie: string): string => cookie.split(';')[0];
 
+/** Auth e2e uses isolated module; force inline queue so awaitIdleForTests() waits for work. */
+const savedRedisUrlForAuthE2e = env.REDIS_URL;
+
 const expectAuthCookies = (response: Response): string => {
   const cookies = getSetCookies(response);
   const accessCookie = findCookie(cookies, ACCESS_TOKEN_COOKIE);
@@ -301,18 +307,21 @@ const mockPasswordResetTokenRepository = {
     execute: mockPasswordResetInvalidateExecute,
   })),
   manager: {
-    transaction: jest.fn(async (fn: (m: {
-      createQueryBuilder: () => {
-        update: jest.Mock;
-        set: jest.Mock;
-        where: jest.Mock;
-        andWhere: jest.Mock;
-        execute: jest.Mock;
-      };
-      findOne: jest.Mock;
-      create: jest.Mock;
-      save: jest.Mock;
-    }) => Promise<void>) => {
+    transaction: jest.fn(
+      async (
+        fn: (m: {
+          createQueryBuilder: () => {
+            update: jest.Mock;
+            set: jest.Mock;
+            where: jest.Mock;
+            andWhere: jest.Mock;
+            execute: jest.Mock;
+          };
+          findOne: jest.Mock;
+          create: jest.Mock;
+          save: jest.Mock;
+        }) => Promise<void>,
+      ) => {
         const qb = {
           update: jest.fn().mockReturnThis(),
           set: jest.fn().mockReturnThis(),
@@ -322,12 +331,14 @@ const mockPasswordResetTokenRepository = {
         };
         await fn({
           createQueryBuilder: () => qb,
-          findOne: jest.fn(async (Entity: unknown, opts?: { where?: { id?: string } }) => {
-            if (Entity === User && opts?.where?.id) {
-              return { id: opts.where.id };
-            }
-            return null;
-          }),
+          findOne: jest.fn(
+            async (Entity: unknown, opts?: { where?: { id?: string } }) => {
+              if (Entity === User && opts?.where?.id) {
+                return { id: opts.where.id };
+              }
+              return null;
+            },
+          ),
           create: jest.fn((_entity: unknown, row: unknown) => row),
           save: mockPasswordResetSave,
         });
@@ -344,6 +355,8 @@ describe('Auth (e2e)', () => {
   let passwordResetQueue: PasswordResetQueueService;
 
   beforeEach(async () => {
+    jest.replaceProperty(env, 'REDIS_URL', undefined);
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
         ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
@@ -391,6 +404,11 @@ describe('Auth (e2e)', () => {
 
   afterEach(async () => {
     if (app) await app.close();
+    if (savedRedisUrlForAuthE2e !== undefined) {
+      jest.replaceProperty(env, 'REDIS_URL', savedRedisUrlForAuthE2e);
+    } else {
+      jest.replaceProperty(env, 'REDIS_URL', undefined);
+    }
   });
 
   it('POST /auth/register creates an unverified user and sends an OTP without cookies', async () => {
@@ -449,7 +467,9 @@ describe('Auth (e2e)', () => {
     expect(mockPasswordResetInvalidateExecute).toHaveBeenCalled();
     expect(mockPasswordResetTokenRepository.save).toHaveBeenCalled();
     expect(mailService.passwordResetMessages).toHaveLength(1);
-    expect(mailService.passwordResetMessages[0]?.to).toBe(registerPayload.email);
+    expect(mailService.passwordResetMessages[0]?.to).toBe(
+      registerPayload.email,
+    );
     expect(mailService.passwordResetMessages[0]?.token?.length).toBeGreaterThan(
       10,
     );
@@ -501,7 +521,7 @@ describe('Auth (e2e)', () => {
     });
   });
 
-  it('POST /auth/reset-password returns 422 when passwords do not match', async () => {
+  it('POST /auth/reset-password returns 400 when passwords do not match', async () => {
     const response = await request(app.getHttpServer())
       .post('/auth/reset-password')
       .send({
@@ -510,12 +530,16 @@ describe('Auth (e2e)', () => {
         confirmPassword: 'OtherPass999',
       });
 
-    expect(response.status).toBe(422);
+    expect(response.status).toBe(400);
     expect(response.body).toMatchObject({
       success: false,
-      status_code: 422,
-      message: 'Passwords do not match',
+      status_code: 400,
     });
+    const msg = response.body.message;
+    const messages = Array.isArray(msg) ? msg : [msg];
+    expect(messages).toEqual(
+      expect.arrayContaining(['Passwords do not match']),
+    );
   });
 
   it('POST /auth/register persists the selected employer role', async () => {

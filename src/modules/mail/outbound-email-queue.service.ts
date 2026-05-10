@@ -7,14 +7,24 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Queue, Worker } from 'bullmq';
+import { z } from 'zod';
 import { redisQueueConnection } from '../../config/redis-queue';
 import type { PasswordResetEmailPayload } from './mail.types';
 import { MailService } from './mail.service';
 
-const QUEUE_NAME = 'outbound-email';
+const QUEUE_NAME = 'password-reset-email';
+
+const passwordResetEmailJobSchema = z.object({
+  to: z.string().min(1),
+  token: z.string().min(1),
+  expiresAt: z.union([z.date(), z.string(), z.number()]),
+  resetLink: z.string().optional(),
+});
 
 @Injectable()
-export class OutboundEmailQueueService implements OnModuleInit, OnModuleDestroy {
+export class OutboundEmailQueueService
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(OutboundEmailQueueService.name);
   private queue: Queue | null = null;
   private worker: Worker | null = null;
@@ -39,9 +49,15 @@ export class OutboundEmailQueueService implements OnModuleInit, OnModuleDestroy 
         if (job.name !== 'password-reset') {
           throw new Error(`Unknown outbound email job: ${job.name}`);
         }
-        await this.mailService.sendPasswordResetImmediate(
-          job.data as PasswordResetEmailPayload,
-        );
+        const parsed = passwordResetEmailJobSchema.safeParse(job.data);
+        if (!parsed.success) {
+          this.logger.error(
+            'Invalid password-reset email job payload',
+            parsed.error.flatten(),
+          );
+          throw new Error('Invalid password-reset email job payload');
+        }
+        await this.mailService.sendPasswordResetImmediate(parsed.data);
       },
       { connection: conn },
     );

@@ -223,7 +223,10 @@ describe('Onboarding (e2e)', () => {
           provide: getRepositoryToken(EmployerProfile),
           useClass: InMemoryEmployerProfileRepository,
         },
-        { provide: VerificationOtpService, useClass: StubVerificationOtpService },
+        {
+          provide: VerificationOtpService,
+          useClass: StubVerificationOtpService,
+        },
         { provide: MailService, useClass: StubMailService },
         {
           provide: getRepositoryToken(PasswordResetToken),
@@ -272,7 +275,9 @@ describe('Onboarding (e2e)', () => {
   });
 
   it('POST /candidate/onboarding completes candidate onboarding and reissues auth cookies', async () => {
-    const user = (await usersService.findOne('candidate-user')) as CandidateUser;
+    const user = (await usersService.findOne(
+      'candidate-user',
+    )) as CandidateUser;
     const cookieHeader = await accessCookieHeaderFor(jwtService, user);
 
     const response = await request(app.getHttpServer())
@@ -306,7 +311,9 @@ describe('Onboarding (e2e)', () => {
   });
 
   it('POST /candidate/onboarding rejects repeated completion', async () => {
-    const user = (await usersService.findOne('candidate-user')) as CandidateUser;
+    const user = (await usersService.findOne(
+      'candidate-user',
+    )) as CandidateUser;
     const cookieHeader = await accessCookieHeaderFor(jwtService, user);
 
     await request(app.getHttpServer())

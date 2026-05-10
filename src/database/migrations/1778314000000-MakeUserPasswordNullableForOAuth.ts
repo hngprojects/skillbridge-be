@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class MakeUserPasswordNullableForOAuth1778314000000
-  implements MigrationInterface
-{
+export class MakeUserPasswordNullableForOAuth1778314000000 implements MigrationInterface {
   name = 'MakeUserPasswordNullableForOAuth1778314000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

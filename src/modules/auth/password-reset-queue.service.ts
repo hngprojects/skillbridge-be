@@ -15,7 +15,9 @@ const QUEUE_NAME = 'password-reset';
 export type PasswordResetJobData = { userId: string };
 
 @Injectable()
-export class PasswordResetQueueService implements OnModuleInit, OnModuleDestroy {
+export class PasswordResetQueueService
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(PasswordResetQueueService.name);
   private queue: Queue | null = null;
   private worker: Worker | null = null;
@@ -56,6 +58,8 @@ export class PasswordResetQueueService implements OnModuleInit, OnModuleDestroy 
   enqueue(userId: string): void {
     const conn = redisQueueConnection();
     if (!conn) {
+      // Best-effort only: if the process exits before setImmediate runs or before
+      // delivery finishes, the email is never sent (unlike BullMQ jobs persisted in Redis).
       this.inlinePending++;
       setImmediate(() => {
         void (async () => {
@@ -74,18 +78,16 @@ export class PasswordResetQueueService implements OnModuleInit, OnModuleDestroy 
       });
       return;
     }
-    void this.queue!
-      .add(
-        'deliver',
-        { userId } satisfies PasswordResetJobData,
-        { removeOnComplete: true, removeOnFail: false },
-      )
-      .catch((err: unknown) => {
-        this.logger.error(
-          'Failed to enqueue password-reset job',
-          err instanceof Error ? err.stack : err,
-        );
-      });
+    void this.queue!.add(
+      'password-reset-delivery',
+      { userId } satisfies PasswordResetJobData,
+      { removeOnComplete: true, removeOnFail: false },
+    ).catch((err: unknown) => {
+      this.logger.error(
+        'Failed to enqueue password-reset job',
+        err instanceof Error ? err.stack : err,
+      );
+    });
   }
 
   /** For e2e when REDIS_URL is unset: wait until inline deliveries finish. */

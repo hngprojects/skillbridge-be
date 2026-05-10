@@ -358,7 +358,7 @@ Step 2 — Submit new password
     │
     ├── Look up token → not found/expired → 400 { status: "error", message: "Invalid or expired token" }
     ├── Check used flag → already used → 400 { status: "error", message: "Token already used" }
-    ├── Validate password === confirmPassword → mismatch → 422
+    ├── Validate password === confirmPassword (DTO) → mismatch → 400
     │
     ├── Hash new password → UPDATE users SET password_hash = $hash
     ├── Mark token as used
@@ -793,7 +793,7 @@ Set a new password using a reset token.
 200  { "status": "success", "message": "Password updated. Please log in." }
 400  { "status": "error", "message": "Invalid or expired token" }
 400  { "status": "error", "message": "Token already used" }
-422  { "status": "error", "message": "Passwords do not match" }
+400  { "status": "error", "message": "Passwords do not match" }
 ```
 
 > All active refresh tokens for the user are revoked on success.
