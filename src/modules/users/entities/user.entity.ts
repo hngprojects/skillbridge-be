@@ -13,7 +13,7 @@ import { OAuthUser } from './user-oauth-account.entity';
 
 export enum UserRole {
   ADMIN = 'admin',
-  CANDIDATE = 'candidate',
+  CANDIDATE = 'talent',
   EMPLOYER = 'employer',
 }
 

@@ -12,7 +12,7 @@ import {
 
 export enum UserRole {
   ADMIN = 'admin',
-  CANDIDATE = 'candidate',
+  CANDIDATE = 'talent',
   EMPLOYER = 'employer',
 }
 
