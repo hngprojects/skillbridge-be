@@ -13,9 +13,16 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { randomUUID, timingSafeEqual } from 'crypto';
-import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
+import type {
+  Request as ExpressRequest,
+  Response as ExpressResponse,
+} from 'express';
 import type { StringValue } from 'ms';
-import { env, linkedInHttpMaxBodyBytes, linkedInHttpTimeoutMs } from '../../config/env';
+import {
+  env,
+  linkedInHttpMaxBodyBytes,
+  linkedInHttpTimeoutMs,
+} from '../../config/env';
 import { MailService } from '../mail/mail.service';
 import { User, UserRole } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
@@ -33,7 +40,17 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { VerificationOtpSource } from './entities/verification-otp.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
-import { isAbortError, isRecord, LINKEDIN_ACCESS_TOKEN_URL, LINKEDIN_AUTHORIZATION_URL, LINKEDIN_OAUTH_SCOPES, LINKEDIN_USERINFO_URL, OAUTH_PROVIDER_LINKEDIN, parseLinkedInTokenResponse } from './linkedin-oauth.service';
+import {
+  isAbortError,
+  isRecord,
+  LINKEDIN_ACCESS_TOKEN_URL,
+  LINKEDIN_AUTHORIZATION_URL,
+  LINKEDIN_OAUTH_SCOPES,
+  LINKEDIN_USERINFO_URL,
+  OAUTH_PROVIDER_LINKEDIN,
+  parseLinkedInTokenResponse,
+} from './linkedin-oauth.service';
+import { GoogleProfile } from './strategies/google.strategy';
 
 export interface AuthUser {
   id: string;
@@ -86,7 +103,6 @@ export interface OAuthProfilePayload {
   lastName: string;
   avatarUrl: string | null;
 }
-
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -138,7 +154,7 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired otp');
     }
 
-    const verifiedUser = user.is_verified
+    const verifiedUser: User = user.is_verified
       ? user
       : await this.usersService.markVerified(user.id);
     const tokens = await this.signTokens(verifiedUser);
@@ -200,14 +216,24 @@ export class AuthService {
       });
     }
 
-    if (!user.password) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
+    if (!user.password) throw new UnauthorizedException('Invalid credentials');
     const valid = await argon2.verify(user.password, dto.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     return this.issueTokens(user, 'Login successful');
+  }
+
+  async googleCallback(profile: GoogleProfile): Promise<AuthResult> {
+    // Normalize GoogleProfile to OAuthProfilePayload format
+    const normalizedProfile: OAuthProfilePayload = {
+      providerId: profile.providerId,
+      email: profile.email,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      avatarUrl: profile.picture,
+    };
+
+    return this.finalizeOAuthLogin('google', normalizedProfile);
   }
 
   async refresh(
@@ -297,9 +323,7 @@ export class AuthService {
     const clientIdRaw = env.LINKEDIN_CLIENT_ID;
     const redirectUriRaw = env.LINKEDIN_REDIRECT_URI;
     if (!clientIdRaw || !redirectUriRaw) {
-      throw new ServiceUnavailableException(
-        'LinkedIn OAuth is not configured',
-      );
+      throw new ServiceUnavailableException('LinkedIn OAuth is not configured');
     }
 
     const state = randomUUID();
@@ -370,7 +394,7 @@ export class AuthService {
 
   /**
    * Returns OAuth row, auto-link by email, or new user.
-  */
+   */
   async finalizeOAuthLogin(
     provider: string,
     profile: OAuthProfilePayload,
@@ -481,7 +505,9 @@ export class AuthService {
         received += chunk.byteLength;
         if (received > maxBytes) {
           //await reader.cancel('Response body too large');
-          throw new PayloadTooLargeException('LinkedIn response body too large');
+          throw new PayloadTooLargeException(
+            'LinkedIn response body too large',
+          );
         }
         out += decoder.decode(chunk, { stream: true });
       }
