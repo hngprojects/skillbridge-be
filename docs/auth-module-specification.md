@@ -47,7 +47,7 @@ SkillBridge has three distinct roles, each with a different access surface:
 
 | Method                | Email verified?                           | Password          |
 | --------------------- | ----------------------------------------- | ----------------- |
-| Email/password        | Required (manual, 5 - 15 mins otp)        | Argon hash stored |
+| Email/password        | Required (manual, 15-minute OTP)          | Argon hash stored |
 | Google/LinkedIn OAuth | Trust the provider for email verification | No password       |
 
 ---
@@ -247,7 +247,7 @@ There are two distinct signup/login paths. Both converge at the same onboarding 
 | ------------------- | --------------------------------------------- | -------------------------------------- |
 | Entry point         | Registration form                             | "Continue with Google/LinkedIn" button |
 | Fields collected    | firstName, lastName, email, country, password | Pulled from provider profile           |
-| Email verification  | Manual — 5 - 15 mins otp sent to inbox        | Automatic — provider pre-verifies      |
+| Email verification  | Manual — 15-minute OTP sent to inbox          | Automatic — provider pre-verifies      |
 | Password            | Required (Argon hashed, cost 12)              | Never set (`NULL`)                     |
 | Account conflict    | N/A                                           | Auto-link if email already exists      |
 | After signup        | Must verify email → then onboarding           | Straight to onboarding                 |
@@ -291,7 +291,7 @@ POST /auth/register
   │     { first_name, last_name, email, password_hash, country,
   │       role: null, is_verified: false, onboarding_complete: false }
   │
-  ├── Generate email verification OTP (5 - 15 mins TTL)
+  ├── Generate email verification OTP (15-minute TTL; `VERIFICATION_OTP_EXPIRES_IN`, default `15m`)
   │     Store: { user_id, otp_hash, expires_at } in verification_otps table
   │
   └── Send verification email → OTP code
@@ -303,7 +303,7 @@ POST /auth/register
 ```
 POST /auth/verify-email
   │
-  ├── Look up OTP in verification_otps
+  ├── Look up OTP in verification_otps (unused, expires_at > now; OTP TTL defaults to 15 minutes via VERIFICATION_OTP_EXPIRES_IN)
   │     ├── Not found → 400 { status: "error", message: "Invalid otp" }
   │     └── Found but expired → 400 { status: "error", message: "Otp expired. Request a new one." }
   │
@@ -430,13 +430,13 @@ Provider redirects to:
 
 #### B3. Key differences from Email/Password flow
 
-|                    | Email / Password                  | OAuth                                      |
-| ------------------ | --------------------------------- | ------------------------------------------ |
-| Password           | Required (Argon hashed)           | Never set (`NULL`)                         |
-| Email verification | Manual (5 - 15mins otp via email) | Automatic (`is_verified = true` on create) |
-| Name collection    | From registration form            | From provider profile                      |
-| Account conflict   | N/A                               | Auto-link via `user_oauth_accounts`        |
-| Onboarding step    | Always required after verify      | Always required for new users              |
+|                    | Email / Password                 | OAuth                                      |
+| ------------------ | -------------------------------- | ------------------------------------------ |
+| Password           | Required (Argon hashed)          | Never set (`NULL`)                         |
+| Email verification | Manual (15-minute OTP via email) | Automatic (`is_verified = true` on create) |
+| Name collection    | From registration form           | From provider profile                      |
+| Account conflict   | N/A                              | Auto-link via `user_oauth_accounts`        |
+| Onboarding step    | Always required after verify     | Always required for new users              |
 
 ---
 
@@ -575,11 +575,13 @@ Confirm email address using OTP.
 > Sets `access_token` and `refresh_token` as httpOnly cookies.
 > Client reads `onboardingComplete` from user object and redirects to `/onboarding/role-select`.
 
+Verification OTPs expire after **15 minutes** by default (`VERIFICATION_OTP_EXPIRES_IN`, e.g. `15m` in `src/config/env.ts` / `.env`). `POST /auth/verify-email` rejects OTPs after `expires_at`. Resending issues a **new** OTP with a fresh **15-minute** window (previous unused OTPs for that user are invalidated).
+
 ---
 
 ### `POST /auth/resend-verification`
 
-Resend the verification email. For users who missed or lost the original email.
+Resend the verification email. For users who missed or lost the original email. The new OTP uses the same TTL as registration (**15 minutes** by default; configured with `VERIFICATION_OTP_EXPIRES_IN`).
 
 **Request body:**
 
@@ -890,7 +892,7 @@ Get the currently authenticated user. Cookie sent automatically.
 | Token rotation               | Refresh tokens rotate on every use — old token immediately revoked                                                       |
 | Rate limiting                | `/auth/login`: 5 req/min per IP · `/auth/forgot-password`: 5 req/min · `/auth/resend-verification`: 3 per hour per email |
 | Email enumeration prevention | Forgot password always returns 200 regardless of email existence                                                         |
-| Token TTLs                   | Access: 15min · Refresh: 7 days · Email verify: 24hr · Password reset: 1hr                                               |
+| Token TTLs                   | Access: 15min · Refresh: 7 days · Email verification OTP: 15min (`VERIFICATION_OTP_EXPIRES_IN`) · Password reset: 1hr    |
 | HTTPS only                   | All auth endpoints require TLS in production                                                                             |
 | CORS credentials             | `credentials: true` required on backend — mobile uses `withCredentials: true` on Axios                                   |
 
