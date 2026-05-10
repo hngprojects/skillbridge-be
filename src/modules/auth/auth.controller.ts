@@ -46,6 +46,7 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { LinkedInCallbackQueryDto } from './dto/linkedin-callback-query.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { OAuthSignupRoleRequiredException } from './exceptions/oauth-signup-role-required.exception';
 
 const linkedInCallbackQueryPipe = new ValidationPipe({
   whitelist: true,
@@ -275,8 +276,7 @@ export class AuthController {
     } catch (error: unknown) {
       clearOAuthSignupRoleCookie(response);
       const key =
-        error instanceof HttpException &&
-        error.message === 'OAuth signup role required'
+        error instanceof OAuthSignupRoleRequiredException
           ? 'oauth_role_required'
           : 'oauth_failed';
       return response.redirect(

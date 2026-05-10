@@ -61,6 +61,7 @@ import {
 import { PasswordResetQueueService } from './password-reset-queue.service';
 import { GoogleProfile } from './strategies/google.strategy';
 import { isOAuthSignupRole, type OAuthSignupRole } from './oauth-signup-role';
+import { OAuthSignupRoleRequiredException } from './exceptions/oauth-signup-role-required.exception';
 
 export interface AuthUser {
   id: string;
@@ -508,8 +509,7 @@ export class AuthService {
         error instanceof BadRequestException &&
         error.message === 'Invalid OAuth state'
           ? 'oauth_state_mismatch'
-          : error instanceof BadRequestException &&
-              error.message === 'OAuth signup role required'
+          : error instanceof OAuthSignupRoleRequiredException
             ? 'oauth_role_required'
             : 'oauth_failed';
 

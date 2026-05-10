@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   ExecutionContext,
   INestApplication,
@@ -43,6 +42,7 @@ import {
 } from '../src/modules/auth/verification-otp.service';
 import { PasswordResetQueueService } from '../src/modules/auth/password-reset-queue.service';
 import { MailService } from '../src/modules/mail/mail.service';
+import { OAuthSignupRoleRequiredException } from '../src/modules/auth/exceptions/oauth-signup-role-required.exception';
 import { CreateUserDto } from '../src/modules/users/dto/create-user.dto';
 import { UpdateUserDto } from '../src/modules/users/dto/update-user.dto';
 import { User, UserRole } from '../src/modules/users/entities/user.entity';
@@ -295,7 +295,7 @@ class InMemoryUsersService {
 
     // Create new user with OAuth link
     if (!signupRole) {
-      throw new BadRequestException('OAuth signup role required');
+      throw new OAuthSignupRoleRequiredException();
     }
     return await this.createVerifiedUserWithOauthLink({
       email: profile.email,
