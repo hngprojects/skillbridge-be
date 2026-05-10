@@ -35,12 +35,6 @@ import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
 import { isAbortError, isRecord, LINKEDIN_ACCESS_TOKEN_URL, LINKEDIN_AUTHORIZATION_URL, LINKEDIN_OAUTH_SCOPES, LINKEDIN_USERINFO_URL, OAUTH_PROVIDER_LINKEDIN, parseLinkedInTokenResponse } from './linkedin-oauth.service';
 
-export interface Organisation {
-  id: string;
-  name: string;
-  [key: string]: unknown;
-}
-
 export interface AuthUser {
   id: string;
   email: string;
@@ -63,7 +57,6 @@ export interface AuthSession {
   message: string;
   data: {
     user: AuthUser;
-    organisations: Organisation[];
   };
 }
 
@@ -610,7 +603,6 @@ export class AuthService {
       message,
       data: {
         user: this.toAuthUser(user),
-        organisations: [],
       },
       tokens,
     };
