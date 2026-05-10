@@ -1,0 +1,119 @@
+name: CD
+
+on:
+  push:
+    branches: [staging, main]
+
+concurrency:
+  group: cd-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI Checks
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy to ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    needs: ci
+    steps:
+      - name: Set deploy target
+        id: target
+        run: |
+          if [ "${{ github.ref_name }}" = "staging" ]; then
+            echo "dir=staging" >> "$GITHUB_OUTPUT"
+            echo "app=skillbridge-staging" >> "$GITHUB_OUTPUT"
+            echo "env_flag=staging" >> "$GITHUB_OUTPUT"
+            echo "environment=staging" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            echo "dir=production" >> "$GITHUB_OUTPUT"
+            echo "app=skillbridge-prod" >> "$GITHUB_OUTPUT"
+            echo "env_flag=production" >> "$GITHUB_OUTPUT"
+            echo "environment=production" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Unknown branch '${{ github.ref_name }}' — expected 'staging' or 'main'"
+            exit 1
+          fi
+
+      - name: Validate env secret
+        env:
+          DOTENV_STAGING: ${{ secrets.STAGING_ENV }}
+          DOTENV_PRODUCTION: ${{ secrets.PRODUCTION_ENV }}
+        run: |
+          ENV="${{ steps.target.outputs.environment }}"
+          if [ "$ENV" = "production" ]; then
+            DOTENV="$DOTENV_PRODUCTION"
+          else
+            DOTENV="$DOTENV_STAGING"
+          fi
+          if [ -z "$DOTENV" ]; then
+            echo "::error::Environment secret for '$ENV' is empty or unset. Check GitHub repo secrets."
+            exit 1
+          fi
+          echo "Environment secret is set (${#DOTENV} chars)"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          DOTENV_STAGING: ${{ secrets.STAGING_ENV }}
+          DOTENV_PRODUCTION: ${{ secrets.PRODUCTION_ENV }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          envs: DOTENV_STAGING,DOTENV_PRODUCTION
+          script_stop: true
+          script: |
+            set -e
+
+            DEPLOY_DIR="$HOME/skillbridge/backend/${{ steps.target.outputs.dir }}"
+            APP_NAME="${{ steps.target.outputs.app }}"
+            ENV_FLAG="${{ steps.target.outputs.env_flag }}"
+            REPO="https://github.com/${{ github.repository }}.git"
+            BRANCH="${{ github.ref_name }}"
+
+            # Select the correct env file
+            if [ "$ENV_FLAG" = "production" ]; then
+              DOTENV="$DOTENV_PRODUCTION"
+            else
+              DOTENV="$DOTENV_STAGING"
+            fi
+
+            if [ -z "$DOTENV" ]; then
+              echo "FATAL: env secret for $ENV_FLAG is empty"
+              exit 1
+            fi
+
+            mkdir -p "$DEPLOY_DIR"
+            cd "$DEPLOY_DIR"
+
+            # Clone on first deploy, pull on subsequent
+            if [ ! -d ".git" ]; then
+              git clone --branch "$BRANCH" "$REPO" .
+            else
+              git fetch origin "$BRANCH"
+              git reset --hard "origin/$BRANCH"
+            fi
+
+            # Write environment file
+            printf '%s\n' "$DOTENV" > .env
+            chmod 600 .env
+
+            # Install dependencies and build
+            corepack enable
+            pnpm install --frozen-lockfile
+            pnpm build
+
+            # Run database migrations
+            pnpm migration:run
+
+            # Restart application with PM2
+            export PM2_APP_NAME="$APP_NAME"
+
+            if pm2 describe "$APP_NAME" > /dev/null 2>&1; then
+              pm2 restart ecosystem.config.cjs --only "$APP_NAME" --env "$ENV_FLAG" --update-env
+            else
+              pm2 start ecosystem.config.cjs --env "$ENV_FLAG"
+            fi
+            pm2 save

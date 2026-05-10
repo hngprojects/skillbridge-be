@@ -5,8 +5,11 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   Req,
   Res,
+  UseGuards,
+  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -14,10 +17,13 @@ import {
   ApiCookieAuth,
   ApiForbiddenResponse,
   ApiOperation,
+  ApiResponse,
   ApiTooManyRequestsResponse,
   ApiTags,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
-import type { Request, Response } from 'express';
+import { ThrottlerGuard } from '@nestjs/throttler';
+import { type Request, type Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -28,10 +34,24 @@ import {
   setAuthCookies,
 } from './auth.cookies';
 import { AuthService } from './auth.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { GoogleOAuthGuard } from './guards/google-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { LinkedInCallbackQueryDto } from './dto/linkedin-callback-query.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+
+const linkedInCallbackQueryPipe = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+  transformOptions: { enableImplicitConversion: false },
+});
+import type { GoogleProfile } from './strategies/google.strategy';
+import { env } from '../../config/env';
+import { UserRole } from '../users/entities/user.entity';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -77,6 +97,48 @@ export class AuthController {
   }
 
   @Public()
+  @Get('linkedin')
+  @ApiOperation({
+    summary: 'Initiate LinkedIn OAuth',
+    description: 'Redirects the browser to the LinkedIn consent screen.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to LinkedIn authorization',
+  })
+  @ApiResponse({
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    description: 'LinkedIn OAuth is not configured',
+  })
+  linkedIn(@Res() res: Response): void {
+    this.authService.applyLinkedInOAuthStart(res);
+  }
+
+  @Public()
+  @Get('linkedin/callback')
+  @ApiOperation({
+    summary: 'LinkedIn OAuth callback',
+    description:
+      'Exchanges the code, sets auth cookies, then redirects to the role-based onboarding or application path.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description:
+      'Redirect to SPA: /candidate/onboarding or /employer/onboarding when setup is incomplete; otherwise /dashboard, /discovery, or /admin. Auth cookies set on this response.',
+  })
+  async linkedInCallback(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query(linkedInCallbackQueryPipe) query: LinkedInCallbackQueryDto,
+  ): Promise<void> {
+    await this.authService.handleLinkedInOAuthCallback(req, res, {
+      code: query.code,
+      state: query.state,
+      error: query.error,
+    });
+  }
+
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Log in with email and password' })
@@ -90,6 +152,84 @@ export class AuthController {
     const result = await this.authService.login(dto);
     setAuthCookies(response, result.tokens);
     return this.authService.toResponse(result);
+  }
+
+  @Public()
+  @UseGuards(ThrottlerGuard)
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request a password reset email' })
+  @ApiTooManyRequestsResponse({
+    description: 'Too many requests — limit is 5 per minute per IP',
+  })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set a new password using a reset token' })
+  @ApiBadRequestResponse({
+    description: 'Invalid, expired, or already used token',
+  })
+  @ApiUnprocessableEntityResponse({
+    description: 'Passwords do not match',
+  })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
+
+  @Public()
+  @Get('google')
+  @UseGuards(GoogleOAuthGuard)
+  @ApiOperation({
+    summary: 'Initiate Google OAuth',
+    description: 'Redirects the browser to the Google consent screen.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to Google authorization',
+  })
+  async googleAuth() {}
+
+  @Public()
+  @Get('google/callback')
+  @UseGuards(GoogleOAuthGuard)
+  @ApiOperation({
+    summary: 'Google OAuth callback',
+    description:
+      'Handles the Google OAuth callback, creates or logs in the user, sets auth cookies, then redirects to the appropriate dashboard based on role and onboarding status.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description:
+      'Redirect to frontend: /candidate/onboarding or /employer/onboarding if setup incomplete; /discovery for employers, /admin for admins, or /dashboard for candidates if complete. Auth cookies set on this response.',
+  })
+  async googleAuthRedirect(
+    @Req() request: Request & { user: GoogleProfile },
+    @Res() response: Response,
+  ) {
+    const result = await this.authService.googleCallback(request.user);
+    setAuthCookies(response, result.tokens);
+    const { role, onboardingComplete } = result.data.user;
+
+    // redirect based on role + onboarding status
+    if (!onboardingComplete) {
+      if (role === UserRole.EMPLOYER) {
+        return response.redirect(`${env.FRONTEND_URL}/employer/onboarding`);
+      }
+      return response.redirect(`${env.FRONTEND_URL}/candidate/onboarding`);
+    }
+
+    // onboarding complete - redirect to role-specific dashboard
+    if (role === UserRole.EMPLOYER) {
+      return response.redirect(`${env.FRONTEND_URL}/discovery`);
+    }
+    if (role === UserRole.ADMIN) {
+      return response.redirect(`${env.FRONTEND_URL}/admin`);
+    }
+    return response.redirect(`${env.FRONTEND_URL}/dashboard`);
   }
 
   @Public()
