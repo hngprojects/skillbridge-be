@@ -2,11 +2,12 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthResult, AuthService } from '../auth/auth.service';
-import { User } from '../users/entities/user.entity';
+import { UsersService } from '../users/users.service';
 import { CompleteEmployerOnboardingDto } from './dto/complete-employer-onboarding.dto';
 import { EmployerProfile } from './entities/employer-profile.entity';
 
@@ -23,6 +24,7 @@ export class EmployerService {
     @InjectRepository(EmployerProfile)
     private readonly employerProfileRepository: Repository<EmployerProfile>,
     private readonly authService: AuthService,
+    private readonly usersService: UsersService,
   ) {}
 
   async completeOnboarding(
@@ -31,11 +33,14 @@ export class EmployerService {
   ): Promise<EmployerOnboardingResult> {
     const profile = await this.employerProfileRepository.manager.transaction(
       async (manager) => {
-        const user = await manager.findOne(User, {
-          where: { id: userId },
-        });
-        if (!user) {
-          throw new ForbiddenException('Invalid user');
+        let user;
+        try {
+          user = await this.usersService.getUserForOnboarding(manager, userId);
+        } catch (error: unknown) {
+          if (error instanceof NotFoundException) {
+            throw new ForbiddenException('Invalid user');
+          }
+          throw error;
         }
         if (user.onboarding_complete) {
           throw new ForbiddenException('Onboarding already completed');
@@ -59,11 +64,7 @@ export class EmployerService {
         });
 
         const savedProfile = await manager.save(EmployerProfile, nextProfile);
-        await manager.update(
-          User,
-          { id: userId },
-          { onboarding_complete: true },
-        );
+        await this.usersService.markOnboardingCompleteWithManager(manager, userId);
 
         return savedProfile;
       },

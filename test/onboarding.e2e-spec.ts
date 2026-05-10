@@ -103,6 +103,20 @@ class InMemoryUsersService {
     return user;
   }
 
+  async getUserForOnboarding(
+    _manager: unknown,
+    id: string,
+  ): Promise<User> {
+    return this.findOne(id);
+  }
+
+  async markOnboardingCompleteWithManager(
+    _manager: unknown,
+    id: string,
+  ): Promise<void> {
+    await this.markOnboardingComplete(id);
+  }
+
   async setRefreshTokenHash(id: string, hash: string | null): Promise<void> {
     const user = await this.findOne(id);
     user.refreshTokenHash = hash;
