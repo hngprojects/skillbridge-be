@@ -4,19 +4,20 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
-import { QueryFailedError, Repository } from 'typeorm';
 import type {
   CreateVerifiedUserWithOauthLinkParams,
   UserOauthProvisioning,
 } from './user-oauth-provisioning.types';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { UserModelAction } from './actions/user.action';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { OAuthUser } from './entities/user-oauth-account.entity';
 import { User, UserRole } from './entities/user.entity';
+import { OAuthUserModelAction } from './actions/user-oauth.action';
+import { OAuthUser } from './entities/user-oauth.entity';
 
 const NO_TRANSACTION = {
   transactionOptions: { useTransaction: false as const },
@@ -46,6 +47,8 @@ export class UsersService {
     private readonly userModelAction: UserModelAction,
     @InjectRepository(OAuthUser)
     private readonly oauthRepository: Repository<OAuthUser>,
+    private readonly oauthUserModelAction: OAuthUserModelAction,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   async create(dto: CreateUserDto): Promise<User> {
@@ -267,11 +270,7 @@ export class UsersService {
       if (!raced.is_verified) {
         await this.markVerified(raced.id);
       }
-      await this.linkOauthAccountToUser(
-        raced.id,
-        provider,
-        profile.providerId,
-      );
+      await this.linkOauthAccountToUser(raced.id, provider, profile.providerId);
       return this.findOne(raced.id);
     }
   }
