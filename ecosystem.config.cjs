@@ -14,13 +14,17 @@ module.exports = {
       merge_logs: true,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
 
+      env_dev: {
+        NODE_ENV: 'development',
+        PORT: process.env.PORT || 3001,
+      },
+      env_staging: {
+        NODE_ENV: 'production',
+        PORT: process.env.PORT || 4001,
+      },
       env_production: {
         NODE_ENV: 'production',
         PORT: process.env.PORT || 5001,
-      },
-      env_staging: {
-        NODE_ENV: 'staging',
-        PORT: process.env.PORT || 4001,
       },
     },
   ],
