@@ -22,22 +22,14 @@ export class FixUserOauthAccountConstraints1778312000000 implements MigrationInt
     );
   }
 
-  public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "public"."IDX_oauth_provider_external_id"`,
-    );
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "public"."IDX_user_oauth_provider"`,
-    );
-
-    await queryRunner.query(
-      `ALTER TABLE "user_oauth_accounts" ADD CONSTRAINT "REL_a093a39110ecd3602d87f0e814" UNIQUE ("user_id")`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "user_oauth_accounts" ADD CONSTRAINT "UQ_7eb25183e951b6ca44f292df21a" UNIQUE ("provider_id")`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "user_oauth_accounts" ADD CONSTRAINT "UQ_e378ee51a78adea4509c0e906d8" UNIQUE ("provider")`,
+  public down(_queryRunner: QueryRunner): Promise<void> {
+    // This migration is irreversible. Rolling back would restore broken UNIQUE
+    // constraints (UQ_e378ee51a78adea4509c0e906d8, UQ_7eb25183e951b6ca44f292df21a,
+    // REL_a093a39110ecd3602d87f0e814) that prevent proper OAuth functionality.
+    throw new Error(
+      'Migration FixUserOauthAccountConstraints1778312000000 is irreversible. ' +
+        'Rollback would restore a broken schema that prevents users from linking ' +
+        'multiple OAuth providers.',
     );
   }
 }
