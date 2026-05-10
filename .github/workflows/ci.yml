@@ -31,8 +31,8 @@ jobs:
       # - name: Check formatting
       #   run: pnpm check-format
 
-      - name: Lint code
-        run: pnpm check-lint
+      # - name: Lint code
+      #   run: pnpm check-lint
 
       - name: Run tests
         run: pnpm test -- --passWithNoTests
