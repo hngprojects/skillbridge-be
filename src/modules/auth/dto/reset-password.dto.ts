@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, MaxLength, MinLength } from 'class-validator';
+import { MatchField } from '../validators/match-field.decorator';
 
 export class ResetPasswordDto {
   @ApiProperty({ description: 'Plaintext reset token from the email' })
@@ -18,5 +19,6 @@ export class ResetPasswordDto {
   @IsString()
   @MinLength(8)
   @MaxLength(128)
+  @MatchField('password', { message: 'Passwords do not match' })
   confirmPassword: string;
 }

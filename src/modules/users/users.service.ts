@@ -267,11 +267,7 @@ export class UsersService {
       if (!raced.is_verified) {
         await this.markVerified(raced.id);
       }
-      await this.linkOauthAccountToUser(
-        raced.id,
-        provider,
-        profile.providerId,
-      );
+      await this.linkOauthAccountToUser(raced.id, provider, profile.providerId);
       return this.findOne(raced.id);
     }
   }

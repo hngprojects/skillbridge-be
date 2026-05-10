@@ -11,21 +11,22 @@ import {
   PayloadTooLargeException,
   ServiceUnavailableException,
   UnauthorizedException,
-  UnprocessableEntityException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
-import {
-  createHash,
-  randomBytes,
-  randomUUID,
-  timingSafeEqual,
-} from 'crypto';
-import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
+import type {
+  Request as ExpressRequest,
+  Response as ExpressResponse,
+} from 'express';
 import type { StringValue } from 'ms';
 import { Repository } from 'typeorm';
-import { env, linkedInHttpMaxBodyBytes, linkedInHttpTimeoutMs } from '../../config/env';
+import {
+  env,
+  linkedInHttpMaxBodyBytes,
+  linkedInHttpTimeoutMs,
+} from '../../config/env';
 import { parseDurationToMs } from '../../config/duration';
 import { MailService } from '../mail/mail.service';
 import { User, UserRole } from '../users/entities/user.entity';
@@ -47,7 +48,16 @@ import { VerificationOtpSource } from './entities/verification-otp.entity';
 import { PasswordResetToken } from './entities/password-reset-token.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
-import { isAbortError, isRecord, LINKEDIN_ACCESS_TOKEN_URL, LINKEDIN_AUTHORIZATION_URL, LINKEDIN_OAUTH_SCOPES, LINKEDIN_USERINFO_URL, OAUTH_PROVIDER_LINKEDIN, parseLinkedInTokenResponse } from './linkedin-oauth.service';
+import {
+  isAbortError,
+  isRecord,
+  LINKEDIN_ACCESS_TOKEN_URL,
+  LINKEDIN_AUTHORIZATION_URL,
+  LINKEDIN_OAUTH_SCOPES,
+  LINKEDIN_USERINFO_URL,
+  OAUTH_PROVIDER_LINKEDIN,
+  parseLinkedInTokenResponse,
+} from './linkedin-oauth.service';
 import { PasswordResetQueueService } from './password-reset-queue.service';
 
 export interface Organisation {
@@ -294,10 +304,6 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto): Promise<ResetPasswordResponse> {
-    if (dto.password !== dto.confirmPassword) {
-      throw new UnprocessableEntityException('Passwords do not match');
-    }
-
     const rawToken = dto.token.trim();
     if (!rawToken) {
       throw new BadRequestException('Invalid or expired token');
@@ -446,9 +452,7 @@ export class AuthService {
     const clientIdRaw = env.LINKEDIN_CLIENT_ID;
     const redirectUriRaw = env.LINKEDIN_REDIRECT_URI;
     if (!clientIdRaw || !redirectUriRaw) {
-      throw new ServiceUnavailableException(
-        'LinkedIn OAuth is not configured',
-      );
+      throw new ServiceUnavailableException('LinkedIn OAuth is not configured');
     }
 
     const state = randomUUID();
@@ -519,7 +523,7 @@ export class AuthService {
 
   /**
    * Returns OAuth row, auto-link by email, or new user.
-  */
+   */
   async finalizeOAuthLogin(
     provider: string,
     profile: OAuthProfilePayload,
@@ -630,7 +634,9 @@ export class AuthService {
         received += chunk.byteLength;
         if (received > maxBytes) {
           //await reader.cancel('Response body too large');
-          throw new PayloadTooLargeException('LinkedIn response body too large');
+          throw new PayloadTooLargeException(
+            'LinkedIn response body too large',
+          );
         }
         out += decoder.decode(chunk, { stream: true });
       }
@@ -796,8 +802,8 @@ export class AuthService {
   }
 
   private buildPasswordResetLink(token: string): string | undefined {
-    const base = env.PASSWORD_RESET_WEB_BASE_URL;
-    if (!base?.trim()) {
+    const base = env.PASSWORD_RESET_WEB_BASE_URL?.trim();
+    if (!base) {
       return undefined;
     }
     const trimmed = base.replace(/\/$/, '');
