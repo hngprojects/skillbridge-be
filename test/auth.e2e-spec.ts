@@ -1044,6 +1044,7 @@ describe('Google OAuth callback (e2e)', () => {
       .get('/auth/google/callback')
       .expect(302);
 
+    expect(response.headers['location']).toContain(env.FRONTEND_URL);
     expect(response.headers['location']).toContain('/onboarding');
     const cookies = getSetCookies(response);
     expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
@@ -1064,6 +1065,7 @@ describe('Google OAuth callback (e2e)', () => {
       .get('/auth/google/callback')
       .expect(302);
 
+    expect(response.headers['location']).toContain(env.FRONTEND_URL);
     expect(response.headers['location']).toContain('/onboarding');
     const cookies = getSetCookies(response);
     expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
@@ -1080,6 +1082,7 @@ describe('Google OAuth callback (e2e)', () => {
       .get('/auth/google/callback')
       .expect(302);
 
+    expect(response.headers['location']).toContain(env.FRONTEND_URL);
     expect(response.headers['location']).toContain('/onboarding');
     const cookies = getSetCookies(response);
     expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);

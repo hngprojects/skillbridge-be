@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthResult, AuthService } from '../auth/auth.service';
-import { UsersService } from '../users/users.service';
+import { User } from '../users/entities/user.entity';
 import { CompleteCandidateOnboardingDto } from './dto/complete-candidate-onboarding.dto';
 import {
   CandidateProfile,
@@ -25,7 +25,6 @@ export class CandidateService {
   constructor(
     @InjectRepository(CandidateProfile)
     private readonly candidateProfileRepository: Repository<CandidateProfile>,
-    private readonly usersService: UsersService,
     private readonly authService: AuthService,
   ) {}
 
@@ -33,31 +32,46 @@ export class CandidateService {
     userId: string,
     dto: CompleteCandidateOnboardingDto,
   ): Promise<CandidateOnboardingResult> {
-    const user = await this.usersService.findOne(userId);
-    if (user.onboarding_complete) {
-      throw new ForbiddenException('Onboarding already completed');
-    }
+    const profile = await this.candidateProfileRepository.manager.transaction(
+      async (manager) => {
+        const user = await manager.findOne(User, {
+          where: { id: userId },
+        });
+        if (!user) {
+          throw new ForbiddenException('Invalid user');
+        }
+        if (user.onboarding_complete) {
+          throw new ForbiddenException('Onboarding already completed');
+        }
 
-    const existingProfile = await this.candidateProfileRepository.findOne({
-      where: { user_id: userId },
-    });
-    if (existingProfile) {
-      throw new ConflictException('Candidate profile already exists');
-    }
+        const existingProfile = await manager.findOne(CandidateProfile, {
+          where: { user_id: userId },
+        });
+        if (existingProfile) {
+          throw new ConflictException('Candidate profile already exists');
+        }
 
-    const profile = await this.candidateProfileRepository.save(
-      this.candidateProfileRepository.create({
-        user_id: userId,
-        role_track: dto.roleTrack.trim(),
-        bio: dto.bio?.trim() || null,
-        status: CandidateProfileStatus.NOT_STARTED,
-        profile_share_link: null,
-        is_published: false,
-        published_at: null,
-      }),
+        const nextProfile = manager.create(CandidateProfile, {
+          user_id: userId,
+          role_track: dto.roleTrack.trim(),
+          bio: dto.bio?.trim() || null,
+          status: CandidateProfileStatus.NOT_STARTED,
+          profile_share_link: null,
+          is_published: false,
+          published_at: null,
+        });
+
+        const savedProfile = await manager.save(CandidateProfile, nextProfile);
+        await manager.update(
+          User,
+          { id: userId },
+          { onboarding_complete: true },
+        );
+
+        return savedProfile;
+      },
     );
 
-    await this.usersService.markOnboardingComplete(userId);
     const session = await this.authService.issueSessionForUser(
       userId,
       'Candidate onboarding completed',
