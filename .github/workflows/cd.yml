@@ -2,7 +2,7 @@ name: CD
 
 on:
   push:
-    branches: [staging, prod]
+    branches: [staging, main]
 
 concurrency:
   group: cd-${{ github.ref_name }}
@@ -17,7 +17,7 @@ jobs:
     name: Deploy to ${{ github.ref_name }}
     runs-on: ubuntu-latest
     needs: ci
-    environment: ${{ github.ref_name == 'prod' && 'production' || 'staging' }}
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
       - name: Set deploy target
         id: target
@@ -33,7 +33,7 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         env:
-          DOTENV: ${{ github.ref_name == 'prod' && secrets.PRODUCTION_ENV || secrets.STAGING_ENV }}
+          DOTENV: ${{ github.ref_name == 'main' && secrets.PRODUCTION_ENV || secrets.STAGING_ENV }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
@@ -71,7 +71,7 @@ jobs:
 
             # Restart application with PM2
             export PM2_APP_NAME="$APP_NAME"
-            ENV_FLAG="${{ github.ref_name == 'prod' && 'production' || 'staging' }}"
+            ENV_FLAG="${{ github.ref_name == 'main' && 'production' || 'staging' }}"
 
             if pm2 describe "$APP_NAME" > /dev/null 2>&1; then
               pm2 restart ecosystem.config.cjs --env "$ENV_FLAG"
