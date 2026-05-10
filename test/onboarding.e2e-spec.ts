@@ -1,5 +1,4 @@
 import {
-  ForbiddenException,
   INestApplication,
   NotFoundException,
   ValidationPipe,
@@ -28,6 +27,8 @@ import {
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
+import { PasswordResetQueueService } from '../src/modules/auth/password-reset-queue.service';
 import { VerificationOtpService } from '../src/modules/auth/verification-otp.service';
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../src/modules/auth/guards/roles.guard';
@@ -224,6 +225,26 @@ describe('Onboarding (e2e)', () => {
         },
         { provide: VerificationOtpService, useClass: StubVerificationOtpService },
         { provide: MailService, useClass: StubMailService },
+        {
+          provide: getRepositoryToken(PasswordResetToken),
+          useValue: {
+            manager: {
+              transaction: jest.fn(
+                async (_fn: (m: unknown) => Promise<void>) => undefined,
+              ),
+            },
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: PasswordResetQueueService,
+          useValue: {
+            enqueue: jest.fn(),
+            awaitIdleForTests: jest.fn().mockResolvedValue(undefined),
+            onModuleDestroy: jest.fn(),
+            onModuleInit: jest.fn(),
+          },
+        },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_GUARD, useClass: RolesGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
@@ -247,7 +268,7 @@ describe('Onboarding (e2e)', () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    if (app) await app.close();
   });
 
   it('POST /candidate/onboarding completes candidate onboarding and reissues auth cookies', async () => {
@@ -296,7 +317,7 @@ describe('Onboarding (e2e)', () => {
 
     const secondAccessCookie = await accessCookieHeaderFor(
       jwtService,
-      (await usersService.findOne(user.id)) as CandidateUser,
+      await usersService.findOne(user.id),
     );
 
     await request(app.getHttpServer())

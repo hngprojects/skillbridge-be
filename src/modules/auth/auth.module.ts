@@ -13,6 +13,7 @@ import { PasswordResetToken } from './entities/password-reset-token.entity';
 import { VerificationOtp } from './entities/verification-otp.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
+import { PasswordResetQueueService } from './password-reset-queue.service';
 
 @Module({
   imports: [
@@ -27,7 +28,12 @@ import { VerificationOtpService } from './verification-otp.service';
     MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, VerificationOtpService],
+  providers: [
+    AuthService,
+    PasswordResetQueueService,
+    JwtStrategy,
+    VerificationOtpService,
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}

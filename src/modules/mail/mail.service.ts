@@ -1,12 +1,21 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, forwardRef, Inject } from '@nestjs/common';
 import { Resend } from 'resend';
 import { env } from '../../config/env';
-import { SendMailOptions } from './mail.types';
+import type {
+  PasswordResetEmailPayload,
+  SendMailOptions,
+} from './mail.types';
+import { OutboundEmailQueueService } from './outbound-email-queue.service';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly client = new Resend(env.RESEND_API_KEY);
+
+  constructor(
+    @Inject(forwardRef(() => OutboundEmailQueueService))
+    private readonly outboundEmailQueue: OutboundEmailQueueService,
+  ) {}
 
   async send({ to, subject, html, text, from }: SendMailOptions) {
     if (!html && !text) {
@@ -35,20 +44,23 @@ export class MailService {
     return data;
   }
 
-  async sendPasswordReset(params: {
-    to: string;
-    token: string;
-    expiresAt: Date;
-    resetLink?: string;
-  }) {
+  /** Enqueues when REDIS_URL is set; otherwise sends immediately (still off the forgot-password await path when called from the password-reset worker). */
+  async sendPasswordReset(params: PasswordResetEmailPayload): Promise<unknown> {
+    return this.outboundEmailQueue.enqueuePasswordReset(params);
+  }
+
+  /** Used by OutboundEmailQueueService worker (or inline enqueue path). */
+  async sendPasswordResetImmediate(params: PasswordResetEmailPayload) {
     const token = params.token?.trim();
     if (!token) {
       throw new Error('sendPasswordReset requires a non-empty token');
     }
 
+    const expiresAt = MailService.coerceExpiresAt(params.expiresAt);
+
     const expiresInMinutes = Math.max(
       1,
-      Math.ceil((params.expiresAt.getTime() - Date.now()) / (60 * 1000)),
+      Math.ceil((expiresAt.getTime() - Date.now()) / (60 * 1000)),
     );
 
     const linkLine = params.resetLink
@@ -69,6 +81,18 @@ export class MailService {
       text,
       html: `${linkHtml}<p>Your reset token: <strong>${token}</strong></p><p>It expires in ${expiresInMinutes} minute(s). If you did not request a reset, ignore this email.</p>`,
     });
+  }
+
+  /** BullMQ serializes job data; `expiresAt` becomes an ISO string. */
+  private static coerceExpiresAt(value: Date | string | number): Date {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value;
+    }
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) {
+      throw new Error('Invalid expiresAt for password reset email');
+    }
+    return d;
   }
 
   async sendVerificationOtp(params: {

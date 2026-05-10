@@ -1,14 +1,17 @@
 import {
   BadRequestException,
   ForbiddenException,
+  forwardRef,
   GatewayTimeoutException,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   Logger,
   PayloadTooLargeException,
   ServiceUnavailableException,
   UnauthorizedException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -38,12 +41,14 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { VerificationOtpSource } from './entities/verification-otp.entity';
 import { PasswordResetToken } from './entities/password-reset-token.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
 import { isAbortError, isRecord, LINKEDIN_ACCESS_TOKEN_URL, LINKEDIN_AUTHORIZATION_URL, LINKEDIN_OAUTH_SCOPES, LINKEDIN_USERINFO_URL, OAUTH_PROVIDER_LINKEDIN, parseLinkedInTokenResponse } from './linkedin-oauth.service';
+import { PasswordResetQueueService } from './password-reset-queue.service';
 
 export interface Organisation {
   id: string;
@@ -103,6 +108,11 @@ export interface ForgotPasswordResponse {
   message: string;
 }
 
+export interface ResetPasswordResponse {
+  status: 'success';
+  message: string;
+}
+
 interface IssuedPasswordResetToken {
   token: string;
   expiresAt: Date;
@@ -128,6 +138,8 @@ export class AuthService {
     @InjectRepository(PasswordResetToken)
     private readonly passwordResetTokenRepository: Repository<PasswordResetToken>,
     private readonly mailService: MailService,
+    @Inject(forwardRef(() => PasswordResetQueueService))
+    private readonly passwordResetQueue: PasswordResetQueueService,
   ) {}
 
   async register(dto: RegisterDto): Promise<{ message: string }> {
@@ -249,26 +261,101 @@ export class AuthService {
     const user = await this.usersService.findByEmail(email);
 
     if (user) {
-      try {
-        const issued = await this.issuePasswordResetToken(user.id);
-        const resetLink = this.buildPasswordResetLink(issued.token);
-        await this.mailService.sendPasswordReset({
-          to: user.email,
-          token: issued.token,
-          expiresAt: issued.expiresAt,
-          ...(resetLink ? { resetLink } : {}),
-        });
-      } catch (err) {
-        this.logger.error(
-          `Forgot-password side effects failed for ${this.redactEmailForLog(user.email)}`,
-          err instanceof Error ? err.stack : err,
-        );
-      }
+      this.passwordResetQueue.enqueue(user.id);
     }
 
     return {
       status: 'success',
       message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+    };
+  }
+
+  /**
+   * Invoked by PasswordResetQueueService (Redis worker or inline after response).
+   */
+  async deliverPasswordResetEmail(userId: string): Promise<void> {
+    const user = await this.usersService.findOneOrNull(userId);
+    if (!user) return;
+    try {
+      const issued = await this.issuePasswordResetToken(user.id);
+      const resetLink = this.buildPasswordResetLink(issued.token);
+      await this.mailService.sendPasswordReset({
+        to: user.email,
+        token: issued.token,
+        expiresAt: issued.expiresAt,
+        ...(resetLink ? { resetLink } : {}),
+      });
+    } catch (err) {
+      this.logger.error(
+        `Forgot-password side effects failed for ${this.redactEmailForLog(user.email)}`,
+        err instanceof Error ? err.stack : err,
+      );
+    }
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<ResetPasswordResponse> {
+    if (dto.password !== dto.confirmPassword) {
+      throw new UnprocessableEntityException('Passwords do not match');
+    }
+
+    const rawToken = dto.token.trim();
+    if (!rawToken) {
+      throw new BadRequestException('Invalid or expired token');
+    }
+
+    const tokenLookupHash = this.passwordResetLookupHash(rawToken);
+
+    await this.passwordResetTokenRepository.manager.transaction(
+      async (manager) => {
+        const row = await manager.findOne(PasswordResetToken, {
+          where: { tokenLookupHash },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!row) {
+          throw new BadRequestException('Invalid or expired token');
+        }
+
+        if (row.usedAt != null) {
+          throw new BadRequestException('Token already used');
+        }
+
+        if (row.expiresAt.getTime() <= Date.now()) {
+          throw new BadRequestException('Invalid or expired token');
+        }
+
+        const tokenValid = await argon2.verify(row.tokenHash, rawToken);
+        if (!tokenValid) {
+          throw new BadRequestException('Invalid or expired token');
+        }
+
+        const user = await manager.findOne(User, {
+          where: { id: row.userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!user) {
+          throw new BadRequestException('Invalid or expired token');
+        }
+
+        const passwordHash = await argon2.hash(dto.password);
+        await manager.update(
+          User,
+          { id: user.id },
+          { password: passwordHash, refreshTokenHash: null },
+        );
+
+        await manager
+          .createQueryBuilder()
+          .update(PasswordResetToken)
+          .set({ usedAt: () => 'CURRENT_TIMESTAMP' })
+          .where('id = :id', { id: row.id })
+          .execute();
+      },
+    );
+
+    return {
+      status: 'success',
+      message: 'Password updated. Please log in.',
     };
   }
 

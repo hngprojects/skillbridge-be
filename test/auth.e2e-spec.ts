@@ -30,6 +30,7 @@ import {
   IssuedVerificationOtp,
   VerificationOtpService,
 } from '../src/modules/auth/verification-otp.service';
+import { PasswordResetQueueService } from '../src/modules/auth/password-reset-queue.service';
 import { MailService } from '../src/modules/mail/mail.service';
 import { CreateUserDto } from '../src/modules/users/dto/create-user.dto';
 import { User, UserRole } from '../src/modules/users/entities/user.entity';
@@ -340,6 +341,7 @@ describe('Auth (e2e)', () => {
   let usersService: InMemoryUsersService;
   let verificationOtpService: InMemoryVerificationOtpService;
   let mailService: MockMailService;
+  let passwordResetQueue: PasswordResetQueueService;
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -351,6 +353,7 @@ describe('Auth (e2e)', () => {
       controllers: [AuthController],
       providers: [
         AuthService,
+        PasswordResetQueueService,
         JwtStrategy,
         { provide: UsersService, useClass: InMemoryUsersService },
         {
@@ -382,6 +385,7 @@ describe('Auth (e2e)', () => {
     usersService = moduleFixture.get(UsersService);
     verificationOtpService = moduleFixture.get(VerificationOtpService);
     mailService = moduleFixture.get(MailService);
+    passwordResetQueue = moduleFixture.get(PasswordResetQueueService);
     jest.clearAllMocks();
   });
 
@@ -436,6 +440,8 @@ describe('Auth (e2e)', () => {
       .send({ email: registerPayload.email })
       .expect(200);
 
+    await passwordResetQueue.awaitIdleForTests();
+
     expect(response.body).toMatchObject({
       status: 'success',
       message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
@@ -466,6 +472,8 @@ describe('Auth (e2e)', () => {
         .send({ email: registerPayload.email })
         .expect(200);
 
+      await passwordResetQueue.awaitIdleForTests();
+
       const link = mailService.passwordResetMessages[0]?.resetLink;
       expect(link).toBeDefined();
       expect(link).toMatch(/^https:\/\/example\.com\/reset#token=/);
@@ -490,6 +498,23 @@ describe('Auth (e2e)', () => {
     expect(sixth.body).toMatchObject({
       success: false,
       status_code: 429,
+    });
+  });
+
+  it('POST /auth/reset-password returns 422 when passwords do not match', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({
+        token: 'dummy-token',
+        password: 'StrongPass123',
+        confirmPassword: 'OtherPass999',
+      });
+
+    expect(response.status).toBe(422);
+    expect(response.body).toMatchObject({
+      success: false,
+      status_code: 422,
+      message: 'Passwords do not match',
     });
   });
 
