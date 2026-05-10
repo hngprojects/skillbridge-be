@@ -3,7 +3,9 @@ import {
   Controller,
   Get,
   HttpCode,
+  HttpException,
   HttpStatus,
+  Param,
   Post,
   Query,
   Req,
@@ -28,7 +30,9 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import {
+  clearOAuthSignupRoleCookie,
   clearAuthCookies,
+  OAUTH_SIGNUP_ROLE_COOKIE,
   readCookie,
   REFRESH_TOKEN_COOKIE,
   setAuthCookies,
@@ -42,6 +46,7 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { LinkedInCallbackQueryDto } from './dto/linkedin-callback-query.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { OAuthSignupRoleRequiredException } from './exceptions/oauth-signup-role-required.exception';
 
 const linkedInCallbackQueryPipe = new ValidationPipe({
   whitelist: true,
@@ -50,13 +55,22 @@ const linkedInCallbackQueryPipe = new ValidationPipe({
   transformOptions: { enableImplicitConversion: false },
 });
 import type { GoogleProfile } from './strategies/google.strategy';
-import { env } from '../../config/env';
-import { UserRole } from '../users/entities/user.entity';
+import { isOAuthSignupRole, type OAuthSignupRole } from './oauth-signup-role';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  private parseOAuthSignupRole(role: string): OAuthSignupRole {
+    if (!isOAuthSignupRole(role)) {
+      throw new HttpException(
+        'Invalid OAuth signup role',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return role;
+  }
 
   @Public()
   @Post('register')
@@ -112,6 +126,24 @@ export class AuthController {
   })
   linkedIn(@Res() res: Response): void {
     this.authService.applyLinkedInOAuthStart(res);
+  }
+
+  @Public()
+  @Get('linkedin/signup/:role')
+  @ApiOperation({
+    summary: 'Initiate LinkedIn OAuth for a specific signup path',
+    description:
+      'Redirects the browser to LinkedIn and preserves whether the user entered through the candidate or employer path.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to LinkedIn authorization',
+  })
+  linkedInForRole(@Param('role') role: string, @Res() res: Response): void {
+    this.authService.applyLinkedInOAuthStart(
+      res,
+      this.parseOAuthSignupRole(role),
+    );
   }
 
   @Public()
@@ -194,12 +226,28 @@ export class AuthController {
   async googleAuth() {}
 
   @Public()
+  @Get('google/signup/:role')
+  @UseGuards(GoogleOAuthGuard)
+  @ApiOperation({
+    summary: 'Initiate Google OAuth for a specific signup path',
+    description:
+      'Redirects the browser to Google and preserves whether the user entered through the candidate or employer path.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to Google authorization',
+  })
+  googleAuthForRole(@Param('role') role: string) {
+    this.parseOAuthSignupRole(role);
+  }
+
+  @Public()
   @Get('google/callback')
   @UseGuards(GoogleOAuthGuard)
   @ApiOperation({
     summary: 'Google OAuth callback',
     description:
-      'Handles the Google OAuth callback, creates or logs in the user, sets auth cookies, then redirects to the appropriate dashboard based on role and onboarding status.',
+      'Handles the Google OAuth callback, creates or logs in the user, sets auth cookies, then redirects to the appropriate frontend route based on role and onboarding status.',
   })
   @ApiResponse({
     status: HttpStatus.FOUND,
@@ -210,26 +258,32 @@ export class AuthController {
     @Req() request: Request & { user: GoogleProfile },
     @Res() response: Response,
   ) {
-    const result = await this.authService.googleCallback(request.user);
-    setAuthCookies(response, result.tokens);
-    const { role, onboardingComplete } = result.data.user;
+    const signupRoleCookie = readCookie(request, OAUTH_SIGNUP_ROLE_COOKIE);
+    const signupRole = isOAuthSignupRole(signupRoleCookie)
+      ? signupRoleCookie
+      : undefined;
 
-    // redirect based on role + onboarding status
-    if (!onboardingComplete) {
-      if (role === UserRole.EMPLOYER) {
-        return response.redirect(`${env.FRONTEND_URL}/employer/onboarding`);
-      }
-      return response.redirect(`${env.FRONTEND_URL}/candidate/onboarding`);
+    try {
+      const result = await this.authService.googleCallback(
+        request.user,
+        signupRole,
+      );
+      clearOAuthSignupRoleCookie(response);
+      setAuthCookies(response, result.tokens);
+      return response.redirect(
+        this.authService.buildFrontendRedirectUrl(result.data.user),
+      );
+    } catch (error: unknown) {
+      clearOAuthSignupRoleCookie(response);
+      const key =
+        error instanceof OAuthSignupRoleRequiredException
+          ? 'oauth_role_required'
+          : 'oauth_failed';
+      return response.redirect(
+        HttpStatus.FOUND,
+        `${this.authService.getFrontendOrigin()}/login?error=${key}`,
+      );
     }
-
-    // onboarding complete - redirect to role-specific dashboard
-    if (role === UserRole.EMPLOYER) {
-      return response.redirect(`${env.FRONTEND_URL}/discovery`);
-    }
-    if (role === UserRole.ADMIN) {
-      return response.redirect(`${env.FRONTEND_URL}/admin`);
-    }
-    return response.redirect(`${env.FRONTEND_URL}/dashboard`);
   }
 
   @Public()

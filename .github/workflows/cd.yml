@@ -101,7 +101,6 @@ jobs:
             chmod 600 .env
 
             # Install dependencies and build
-            corepack enable
             pnpm install --frozen-lockfile
             pnpm build
 
