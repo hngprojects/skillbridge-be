@@ -1,11 +1,5 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
-import {
-  IsIn,
-  IsString,
-  Matches,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
+import { IsIn, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { CreateUserDto } from '../../users/dto/create-user.dto';
 import { UserRole } from '../../users/entities/user.entity';
 
