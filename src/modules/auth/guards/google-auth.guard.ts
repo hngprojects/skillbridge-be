@@ -20,9 +20,11 @@ export class GoogleOAuthGuard extends AuthGuard('google') {
   }
 
   canActivate(context: ExecutionContext) {
-    const request = context.switchToHttp().getRequest<Request & {
-      params?: { role?: string };
-    }>();
+    const request = context.switchToHttp().getRequest<
+      Request & {
+        params?: { role?: string };
+      }
+    >();
     const response = context.switchToHttp().getResponse<Response>();
     const path = request.path ?? '';
     const role = request.params?.role;

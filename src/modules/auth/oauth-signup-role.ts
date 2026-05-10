@@ -10,7 +10,5 @@ export const OAUTH_SIGNUP_ROLES = [
 export function isOAuthSignupRole(
   value: string | undefined,
 ): value is OAuthSignupRole {
-  return (
-    value === UserRole.CANDIDATE || value === UserRole.EMPLOYER
-  );
+  return value === UserRole.CANDIDATE || value === UserRole.EMPLOYER;
 }
