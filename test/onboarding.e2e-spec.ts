@@ -8,6 +8,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PassportModule } from '@nestjs/passport';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import type { StringValue } from 'ms';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
@@ -27,6 +28,8 @@ import {
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
+import { PasswordResetQueueService } from '../src/modules/auth/password-reset-queue.service';
 import { VerificationOtpService } from '../src/modules/auth/verification-otp.service';
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../src/modules/auth/guards/roles.guard';
@@ -164,7 +167,9 @@ class StubVerificationOtpService {}
 
 class StubMailService {}
 
-const getSetCookies = (response: Response): string[] => {
+const getSetCookies = (response: {
+  headers: Record<string, string | string[] | undefined>;
+}): string[] => {
   const header = response.headers['set-cookie'];
   if (Array.isArray(header)) {
     return header;
@@ -188,7 +193,7 @@ const accessCookieHeaderFor = async (
     },
     {
       secret: env.JWT_ACCESS_SECRET,
-      expiresIn: env.JWT_ACCESS_EXPIRES_IN,
+      expiresIn: env.JWT_ACCESS_EXPIRES_IN as StringValue,
     },
   );
 
@@ -221,8 +226,31 @@ describe('Onboarding (e2e)', () => {
           provide: getRepositoryToken(EmployerProfile),
           useClass: InMemoryEmployerProfileRepository,
         },
-        { provide: VerificationOtpService, useClass: StubVerificationOtpService },
+        {
+          provide: VerificationOtpService,
+          useClass: StubVerificationOtpService,
+        },
         { provide: MailService, useClass: StubMailService },
+        {
+          provide: getRepositoryToken(PasswordResetToken),
+          useValue: {
+            manager: {
+              transaction: jest.fn(
+                async (_fn: (m: unknown) => Promise<void>) => undefined,
+              ),
+            },
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: PasswordResetQueueService,
+          useValue: {
+            enqueue: jest.fn(),
+            awaitIdleForTests: jest.fn().mockResolvedValue(undefined),
+            onModuleDestroy: jest.fn(),
+            onModuleInit: jest.fn(),
+          },
+        },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_GUARD, useClass: RolesGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
@@ -246,11 +274,13 @@ describe('Onboarding (e2e)', () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    if (app) await app.close();
   });
 
   it('POST /candidate/onboarding completes candidate onboarding and reissues auth cookies', async () => {
-    const user = (await usersService.findOne('candidate-user')) as CandidateUser;
+    const user = (await usersService.findOne(
+      'candidate-user',
+    )) as CandidateUser;
     const cookieHeader = await accessCookieHeaderFor(jwtService, user);
 
     const response = await request(app.getHttpServer())
@@ -284,7 +314,9 @@ describe('Onboarding (e2e)', () => {
   });
 
   it('POST /candidate/onboarding rejects repeated completion', async () => {
-    const user = (await usersService.findOne('candidate-user')) as CandidateUser;
+    const user = (await usersService.findOne(
+      'candidate-user',
+    )) as CandidateUser;
     const cookieHeader = await accessCookieHeaderFor(jwtService, user);
 
     await request(app.getHttpServer())
@@ -295,7 +327,7 @@ describe('Onboarding (e2e)', () => {
 
     const secondAccessCookie = await accessCookieHeaderFor(
       jwtService,
-      (await usersService.findOne(user.id)),
+      await usersService.findOne(user.id),
     );
 
     await request(app.getHttpServer())

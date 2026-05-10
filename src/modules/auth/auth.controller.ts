@@ -8,8 +8,8 @@ import {
   Query,
   Req,
   Res,
-  ValidationPipe,
   UseGuards,
+  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -20,7 +20,9 @@ import {
   ApiResponse,
   ApiTooManyRequestsResponse,
   ApiTags,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { type Request, type Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
@@ -32,12 +34,14 @@ import {
   setAuthCookies,
 } from './auth.cookies';
 import { AuthService } from './auth.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { GoogleOAuthGuard } from './guards/google-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { LinkedInCallbackQueryDto } from './dto/linkedin-callback-query.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 const linkedInCallbackQueryPipe = new ValidationPipe({
   whitelist: true,
@@ -148,6 +152,32 @@ export class AuthController {
     const result = await this.authService.login(dto);
     setAuthCookies(response, result.tokens);
     return this.authService.toResponse(result);
+  }
+
+  @Public()
+  @UseGuards(ThrottlerGuard)
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request a password reset email' })
+  @ApiTooManyRequestsResponse({
+    description: 'Too many requests — limit is 5 per minute per IP',
+  })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set a new password using a reset token' })
+  @ApiBadRequestResponse({
+    description: 'Invalid, expired, or already used token',
+  })
+  @ApiUnprocessableEntityResponse({
+    description: 'Passwords do not match',
+  })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   @Public()
