@@ -14,6 +14,7 @@ import { VerificationOtp } from './entities/verification-otp.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { VerificationOtpService } from './verification-otp.service';
+import { PasswordResetDeliveryService } from './password-reset-delivery.service';
 import { PasswordResetQueueService } from './password-reset-queue.service';
 
 @Module({
@@ -31,6 +32,7 @@ import { PasswordResetQueueService } from './password-reset-queue.service';
   controllers: [AuthController],
   providers: [
     AuthService,
+    PasswordResetDeliveryService,
     PasswordResetQueueService,
     JwtStrategy,
     GoogleStrategy,
