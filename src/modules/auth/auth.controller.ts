@@ -54,10 +54,7 @@ const linkedInCallbackQueryPipe = new ValidationPipe({
   transformOptions: { enableImplicitConversion: false },
 });
 import type { GoogleProfile } from './strategies/google.strategy';
-import {
-  isOAuthSignupRole,
-  type OAuthSignupRole,
-} from './oauth-signup-role';
+import { isOAuthSignupRole, type OAuthSignupRole } from './oauth-signup-role';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -66,7 +63,10 @@ export class AuthController {
 
   private parseOAuthSignupRole(role: string): OAuthSignupRole {
     if (!isOAuthSignupRole(role)) {
-      throw new HttpException('Invalid OAuth signup role', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'Invalid OAuth signup role',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     return role;
   }

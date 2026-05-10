@@ -103,10 +103,7 @@ class InMemoryUsersService {
     return user;
   }
 
-  async getUserForOnboarding(
-    _manager: unknown,
-    id: string,
-  ): Promise<User> {
+  async getUserForOnboarding(_manager: unknown, id: string): Promise<User> {
     return this.findOne(id);
   }
 
@@ -127,19 +124,27 @@ class InMemoryCandidateProfileRepository {
   private readonly profiles = new Map<string, CandidateProfile>();
   private nextId = 1;
   readonly manager: {
-    transaction: <T>(callback: (manager: {
-      findOne: <Entity>(
-        entity: new () => Entity,
-        options: { where: { id?: string; user_id?: string } },
-      ) => Promise<Entity | null>;
-      create: <Entity>(entity: new () => Entity, payload: Partial<Entity>) => Entity;
-      save: <Entity>(entity: new () => Entity, payload: Entity) => Promise<Entity>;
-      update: <Entity>(
-        entity: new () => Entity,
-        criteria: { id: string },
-        partial: Partial<Entity>,
-      ) => Promise<void>;
-    }) => Promise<T>) => Promise<T>;
+    transaction: <T>(
+      callback: (manager: {
+        findOne: <Entity>(
+          entity: new () => Entity,
+          options: { where: { id?: string; user_id?: string } },
+        ) => Promise<Entity | null>;
+        create: <Entity>(
+          entity: new () => Entity,
+          payload: Partial<Entity>,
+        ) => Entity;
+        save: <Entity>(
+          entity: new () => Entity,
+          payload: Entity,
+        ) => Promise<Entity>;
+        update: <Entity>(
+          entity: new () => Entity,
+          criteria: { id: string },
+          partial: Partial<Entity>,
+        ) => Promise<void>;
+      }) => Promise<T>,
+    ) => Promise<T>;
   };
 
   constructor(private readonly usersService: InMemoryUsersService) {
@@ -168,7 +173,8 @@ class InMemoryCandidateProfileRepository {
           save: async <Entity>(
             _entity: new () => Entity,
             payload: Entity,
-          ): Promise<Entity> => (this.save(payload as CandidateProfile) as Promise<Entity>),
+          ): Promise<Entity> =>
+            this.save(payload as CandidateProfile) as Promise<Entity>,
           update: async <Entity>(
             entity: new () => Entity,
             criteria: { id: string },
@@ -210,19 +216,27 @@ class InMemoryEmployerProfileRepository {
   private readonly profiles = new Map<string, EmployerProfile>();
   private nextId = 1;
   readonly manager: {
-    transaction: <T>(callback: (manager: {
-      findOne: <Entity>(
-        entity: new () => Entity,
-        options: { where: { id?: string; user_id?: string } },
-      ) => Promise<Entity | null>;
-      create: <Entity>(entity: new () => Entity, payload: Partial<Entity>) => Entity;
-      save: <Entity>(entity: new () => Entity, payload: Entity) => Promise<Entity>;
-      update: <Entity>(
-        entity: new () => Entity,
-        criteria: { id: string },
-        partial: Partial<Entity>,
-      ) => Promise<void>;
-    }) => Promise<T>) => Promise<T>;
+    transaction: <T>(
+      callback: (manager: {
+        findOne: <Entity>(
+          entity: new () => Entity,
+          options: { where: { id?: string; user_id?: string } },
+        ) => Promise<Entity | null>;
+        create: <Entity>(
+          entity: new () => Entity,
+          payload: Partial<Entity>,
+        ) => Entity;
+        save: <Entity>(
+          entity: new () => Entity,
+          payload: Entity,
+        ) => Promise<Entity>;
+        update: <Entity>(
+          entity: new () => Entity,
+          criteria: { id: string },
+          partial: Partial<Entity>,
+        ) => Promise<void>;
+      }) => Promise<T>,
+    ) => Promise<T>;
   };
 
   constructor(private readonly usersService: InMemoryUsersService) {
@@ -251,7 +265,8 @@ class InMemoryEmployerProfileRepository {
           save: async <Entity>(
             _entity: new () => Entity,
             payload: Entity,
-          ): Promise<Entity> => (this.save(payload as EmployerProfile) as Promise<Entity>),
+          ): Promise<Entity> =>
+            this.save(payload as EmployerProfile) as Promise<Entity>,
           update: async <Entity>(
             entity: new () => Entity,
             criteria: { id: string },

@@ -60,10 +60,7 @@ import {
 } from './linkedin-oauth.service';
 import { PasswordResetQueueService } from './password-reset-queue.service';
 import { GoogleProfile } from './strategies/google.strategy';
-import {
-  isOAuthSignupRole,
-  type OAuthSignupRole,
-} from './oauth-signup-role';
+import { isOAuthSignupRole, type OAuthSignupRole } from './oauth-signup-role';
 
 export interface AuthUser {
   id: string;
@@ -514,7 +511,7 @@ export class AuthService {
           : error instanceof BadRequestException &&
               error.message === 'OAuth signup role required'
             ? 'oauth_role_required'
-          : 'oauth_failed';
+            : 'oauth_failed';
 
       redirectWithError(key);
     }

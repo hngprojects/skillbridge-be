@@ -11,7 +11,12 @@ import type {
   UserOauthProvisioning,
 } from './user-oauth-provisioning.types';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, QueryFailedError, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  QueryFailedError,
+  Repository,
+} from 'typeorm';
 import { UserModelAction } from './actions/user.action';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PaginationDto } from './dto/pagination.dto';
@@ -175,11 +180,7 @@ export class UsersService {
     manager: EntityManager,
     id: string,
   ): Promise<void> {
-    await manager.update(
-      User,
-      { id },
-      { onboarding_complete: true },
-    );
+    await manager.update(User, { id }, { onboarding_complete: true });
   }
 
   rotateRefreshTokenHash(

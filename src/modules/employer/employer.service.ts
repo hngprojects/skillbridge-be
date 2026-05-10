@@ -64,7 +64,10 @@ export class EmployerService {
         });
 
         const savedProfile = await manager.save(EmployerProfile, nextProfile);
-        await this.usersService.markOnboardingCompleteWithManager(manager, userId);
+        await this.usersService.markOnboardingCompleteWithManager(
+          manager,
+          userId,
+        );
 
         return savedProfile;
       },
