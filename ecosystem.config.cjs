@@ -7,6 +7,12 @@ module.exports = {
       exec_mode: 'fork',
       autorestart: true,
       max_memory_restart: '512M',
+      kill_timeout: 5000,
+
+      out_file: './logs/out.log',
+      error_file: './logs/error.log',
+      merge_logs: true,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
 
       env_production: {
         NODE_ENV: 'production',
