@@ -5,9 +5,7 @@ import { UserRole } from '../../users/entities/user.entity';
 
 class RegisterBaseDto extends PickType(CreateUserDto, [
   'email',
-  'country',
   'password',
-  'profile_pic_url',
 ] as const) {}
 
 export class RegisterDto extends RegisterBaseDto {
@@ -27,7 +25,7 @@ export class RegisterDto extends RegisterBaseDto {
 
   @ApiProperty({ enum: [UserRole.CANDIDATE, UserRole.EMPLOYER] })
   @IsIn([UserRole.CANDIDATE, UserRole.EMPLOYER], {
-    message: 'role must be either candidate or employer',
+    message: 'role must be either talent or employer',
   })
   role: UserRole.CANDIDATE | UserRole.EMPLOYER;
 }
