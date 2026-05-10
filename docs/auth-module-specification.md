@@ -380,11 +380,12 @@ Both Google and LinkedIn follow **the exact same callback logic** — only the p
 #### B1. Initiate OAuth
 
 ```
-User clicks "Continue with Google" or "Continue with LinkedIn"
+User clicks a role-specific OAuth entry on the landing page
   │
-  └── GET /auth/google  OR  GET /auth/linkedin
+  └── GET /auth/google/signup/candidate OR /auth/google/signup/employer
+      OR GET /auth/linkedin/signup/candidate OR /auth/linkedin/signup/employer
         │
-        └── Backend redirects to provider's OAuth consent screen
+        └── Backend stores the selected role context, then redirects to the provider's OAuth consent screen
               (with client_id, redirect_uri, scope: email + profile)
 ```
 
@@ -404,7 +405,7 @@ Provider redirects to:
   │   │   This is a returning OAuth user. Fetch the linked users row.
   │   │   Issue access token + set refresh cookie.
   │   │   Response: **302** to `{FRONTEND_URL}` + path from Post-login Redirect Logic; cookies set on response
-  │   │   (onboarding incomplete → `/onboarding/role-select`; else role → `/dashboard` | `/discovery` | `/admin`)
+  │   │   (onboarding incomplete → `/candidate/onboarding` or `/employer/onboarding`; else role → `/dashboard` | `/discovery` | `/admin`)
   │   │
   │   └── OAuth account NOT found → check users WHERE email = $email
   │
@@ -417,15 +418,16 @@ Provider redirects to:
   │       │   Response: **302** to Post-login Redirect path; cookies set on response
   │       │
   │       │   ⚠ If onboardingComplete = false (edge case: user registered but never finished
-  │       │     onboarding) → redirect to /onboarding/role-select as usual.
+  │       │     onboarding) → redirect to the persisted role's onboarding route as usual.
   │       │
   │       └── CASE 3: Email not found (brand new user) ──────────────────────
+  │               REQUIRE role context from the selected OAuth entry path
   │               INSERT INTO users:
   │                 { first_name, last_name, email, password: NULL,
-  │                   is_verified: true, onboarding_complete: false }
+  │                   is_verified: true, onboarding_complete: false, role }
   │               INSERT INTO user_oauth_accounts { user_id, provider, provider_id }
   │               Issue access token + set refresh cookie.
-  │               Response: **302** to `/onboarding/role-select` (new users); cookies set on response
+  │               Response: **302** to the role-specific onboarding route (new users); cookies set on response
 ```
 
 #### B3. Key differences from Email/Password flow
@@ -696,7 +698,8 @@ If **all three** variables are **omitted**, the app still starts. In that case, 
 
 `302 Found` — `Location` is `{FRONTEND_URL}{path}` per **Post-login Redirect Logic**:
 
-- `onboardingComplete === false` → `/onboarding/role-select`
+- `onboardingComplete === false` and `role === candidate` → `/candidate/onboarding`
+- `onboardingComplete === false` and `role === employer` → `/employer/onboarding`
 - `onboardingComplete === true` and `role === candidate` → `/dashboard`
 - `onboardingComplete === true` and `role === employer` → `/discovery`
 - `onboardingComplete === true` and `role === admin` → `/admin`
@@ -709,6 +712,7 @@ The callback is a full-page browser navigation. Failures use **`302 Found`** to 
 
 | Situation | `Location` (relative to first CORS origin) |
 | --------- | -------------------------------------------- |
+| Brand-new OAuth user reached the callback without role context from a role-specific signup entry | `/login?error=oauth_role_required` |
 | CSRF / state validation: `state` query does not match the `linkedin_oauth_state` cookie, or the cookie is missing while `state` is present | `/login?error=oauth_state_mismatch` |
 | User cancelled at LinkedIn, or provider returned an error, or required query params (`code`, `state`) are missing | `/login?error=oauth_cancelled` |
 | Other failures after state checks (e.g. token exchange, profile fetch, or “not fully configured” at exchange) | `/login?error=oauth_failed` |

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -18,6 +19,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { User, UserRole } from './entities/user.entity';
 import { OAuthUserModelAction } from './actions/user-oauth.action';
 import { OAuthUser } from './entities/user-oauth.entity';
+import type { OAuthSignupRole } from '../auth/oauth-signup-role';
 
 const NO_TRANSACTION = {
   transactionOptions: { useTransaction: false as const },
@@ -227,6 +229,7 @@ export class UsersService {
   async resolveOAuthUserFromProviderProfile(
     provider: string,
     profile: OAuthProviderProfileInput,
+    signupRole?: OAuthSignupRole,
   ): Promise<User> {
     const linked = await this.findOauthAccountWithUser(
       provider,
@@ -250,6 +253,9 @@ export class UsersService {
     }
 
     try {
+      if (!signupRole) {
+        throw new BadRequestException('OAuth signup role required');
+      }
       return await this.createVerifiedUserWithOauthLink({
         email: profile.email,
         first_name: profile.firstName,
@@ -258,6 +264,7 @@ export class UsersService {
         avatar_url: profile.avatarUrl,
         provider,
         providerId: profile.providerId,
+        role: signupRole,
       });
     } catch (err) {
       if (!isPostgresUniqueViolation(err)) {
