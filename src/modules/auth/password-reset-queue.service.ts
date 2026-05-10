@@ -1,6 +1,4 @@
 import {
-  forwardRef,
-  Inject,
   Injectable,
   Logger,
   OnModuleDestroy,
@@ -8,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Queue, Worker } from 'bullmq';
 import { redisQueueConnection } from '../../config/redis-queue';
-import { AuthService } from './auth.service';
+import { PasswordResetDeliveryService } from './password-reset-delivery.service';
 
 const QUEUE_NAME = 'password-reset';
 
@@ -25,8 +23,7 @@ export class PasswordResetQueueService
   private inlineIdleWaiters: Array<() => void> = [];
 
   constructor(
-    @Inject(forwardRef(() => AuthService))
-    private readonly authService: AuthService,
+    private readonly passwordResetDeliveryService: PasswordResetDeliveryService,
   ) {}
 
   onModuleInit(): void {
@@ -42,7 +39,7 @@ export class PasswordResetQueueService
       QUEUE_NAME,
       async (job) => {
         const { userId } = job.data as PasswordResetJobData;
-        await this.authService.deliverPasswordResetEmail(userId);
+        await this.passwordResetDeliveryService.deliverForUser(userId);
       },
       { connection: conn },
     );
@@ -64,7 +61,7 @@ export class PasswordResetQueueService
       setImmediate(() => {
         void (async () => {
           try {
-            await this.authService.deliverPasswordResetEmail(userId);
+            await this.passwordResetDeliveryService.deliverForUser(userId);
           } catch (err) {
             this.logger.error(
               'Inline password-reset delivery failed',

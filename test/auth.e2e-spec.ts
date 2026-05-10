@@ -28,6 +28,7 @@ import {
   FORGOT_PASSWORD_SUCCESS_MESSAGE,
 } from '../src/modules/auth/auth.service';
 import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
+import { PasswordResetDeliveryService } from '../src/modules/auth/password-reset-delivery.service';
 import { GoogleOAuthGuard } from '../src/modules/auth/guards/google-auth.guard';
 import type { GoogleProfile } from '../src/modules/auth/strategies/google.strategy';
 import { OAuthUser } from '../src/modules/users/entities/user-oauth.entity';
@@ -510,6 +511,7 @@ describe('Auth (e2e)', () => {
       controllers: [AuthController],
       providers: [
         AuthService,
+        PasswordResetDeliveryService,
         PasswordResetQueueService,
         JwtStrategy,
         { provide: UsersService, useClass: InMemoryUsersService },
