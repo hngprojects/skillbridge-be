@@ -20,6 +20,7 @@ import {
   ApiResponse,
   ApiTooManyRequestsResponse,
   ApiTags,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
@@ -39,6 +40,7 @@ import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { LinkedInCallbackQueryDto } from './dto/linkedin-callback-query.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 const linkedInCallbackQueryPipe = new ValidationPipe({
   whitelist: true,
@@ -158,6 +160,20 @@ export class AuthController {
   })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set a new password using a reset token' })
+  @ApiBadRequestResponse({
+    description: 'Invalid, expired, or already used token',
+  })
+  @ApiUnprocessableEntityResponse({
+    description: 'Passwords do not match',
+  })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   @Public()

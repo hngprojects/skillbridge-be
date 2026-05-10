@@ -61,6 +61,8 @@ export const env = createEnv({
     DATABASE_SSL: booleanString.default(false),
     DATABASE_SSL_CA: z.string().optional(),
 
+    REDIS_URL: z.string().url().optional(),
+
     JWT_ACCESS_SECRET: z
       .string()
       .min(32, 'JWT_ACCESS_SECRET must be at least 32 chars'),

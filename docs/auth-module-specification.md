@@ -349,7 +349,7 @@ Step 1 — Request reset
     │     { status: "success", message: "If that email exists, a reset link has been sent" }
     │
     └── If email found in users:
-          Generate reset token (random UUID, 1hr TTL)
+          Generate opaque reset token (random bytes, base64url) with configured TTL
           Store: { user_id, token_hash, expires_at, used: false }
           Send reset token to user (out-of-band) — client submits it in JSON body to POST /auth/reset-password
 
@@ -769,6 +769,8 @@ Request a password reset link.
 
 > Always returns 200 regardless of whether the email exists (prevents enumeration).
 
+> When `REDIS_URL` is set, token issuance and password-reset email delivery run in BullMQ workers (Redis) so the handler returns without awaiting Argon2/DB/email I/O for the known-email case. Without `REDIS_URL`, the same work is scheduled on the Node event loop after the response is sent (still not awaited on the request path).
+
 ---
 
 ### `POST /auth/reset-password`
@@ -790,6 +792,7 @@ Set a new password using a reset token.
 ```json
 200  { "status": "success", "message": "Password updated. Please log in." }
 400  { "status": "error", "message": "Invalid or expired token" }
+400  { "status": "error", "message": "Token already used" }
 422  { "status": "error", "message": "Passwords do not match" }
 ```
 
