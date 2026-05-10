@@ -64,7 +64,7 @@ CREATE TABLE users (
   email               VARCHAR(255)  NOT NULL UNIQUE,
   password_hash       VARCHAR(255)  NULL,            -- NULL for OAuth-only accounts
   country             VARCHAR(100)  NOT NULL,
-  role                VARCHAR(20)   NOT NULL DEFAULT 'candidate', -- candidate | employer | admin
+  role                VARCHAR(20)   NOT NULL DEFAULT 'talent', -- talent | employer | admin
   is_verified         BOOLEAN       NOT NULL DEFAULT false,
   onboarding_complete BOOLEAN       NOT NULL DEFAULT false,
   created_at          TIMESTAMP     NOT NULL DEFAULT NOW()
@@ -174,7 +174,7 @@ Tokens are never returned in the response body. The client reads the user object
   "user": {
     "id": "uuid",
     "email": "string",
-    "role": "candidate | employer | admin",
+    "role": "talent | employer | admin",
     "onboardingComplete": false
   }
 }
@@ -185,7 +185,7 @@ Tokens are never returned in the response body. The client reads the user object
 ```json
 {
   "sub": "user-uuid",
-  "role": "candidate | employer | admin",
+  "role": "talent | employer | admin",
   "email": "user@email.com",
   "onboardingComplete": true,
   "iat": 1234567890,
@@ -623,7 +623,7 @@ Email/password login.
        "user": {
          "id":                 "uuid",
          "email":              "string",
-         "role":               "candidate | employer | admin",
+         "role":               "talent | employer | admin",
          "onboardingComplete": "boolean"
        }
      }
@@ -854,7 +854,7 @@ Get the currently authenticated user. Cookie sent automatically.
        "firstName":          "string",
        "lastName":           "string",
        "email":              "string",
-       "role":               "candidate | employer | admin",
+       "role":               "talent | employer | admin",
        "country":            "string",
        "onboardingComplete": "boolean",
        "isVerified":         "boolean",
