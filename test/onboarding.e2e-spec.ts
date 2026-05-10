@@ -8,6 +8,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PassportModule } from '@nestjs/passport';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import type { StringValue } from 'ms';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
@@ -166,7 +167,9 @@ class StubVerificationOtpService {}
 
 class StubMailService {}
 
-const getSetCookies = (response: Response): string[] => {
+const getSetCookies = (response: {
+  headers: Record<string, string | string[] | undefined>;
+}): string[] => {
   const header = response.headers['set-cookie'];
   if (Array.isArray(header)) {
     return header;
@@ -190,7 +193,7 @@ const accessCookieHeaderFor = async (
     },
     {
       secret: env.JWT_ACCESS_SECRET,
-      expiresIn: env.JWT_ACCESS_EXPIRES_IN,
+      expiresIn: env.JWT_ACCESS_EXPIRES_IN as StringValue,
     },
   );
 
