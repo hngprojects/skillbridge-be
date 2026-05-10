@@ -1,12 +1,48 @@
 import { createEnv } from '@t3-oss/env-core';
 import * as dotenv from 'dotenv';
 import { z } from 'zod';
+import { parseDurationToMs } from './duration';
 
 dotenv.config();
 
 const booleanString = z
   .union([z.boolean(), z.enum(['true', 'false'])])
   .transform((v) => v === true || v === 'true');
+
+const durationString = (defaultValue: string) =>
+  z
+    .string()
+    .default(defaultValue)
+    .transform((value) => {
+      parseDurationToMs(value);
+      return value;
+    });
+
+/** Per-field + cross-field rules for LinkedIn OAuth (see exchangeLinkedInCode in auth.service). */
+const linkedInClientIdSchema = z.string().min(1).optional();
+const linkedInClientSecretSchema = z.string().min(1).optional();
+const linkedInRedirectUriSchema = z.url().optional();
+
+const linkedInOAuthEnvTrioSchema = z
+  .object({
+    LINKEDIN_CLIENT_ID: linkedInClientIdSchema,
+    LINKEDIN_CLIENT_SECRET: linkedInClientSecretSchema,
+    LINKEDIN_REDIRECT_URI: linkedInRedirectUriSchema,
+  })
+  .superRefine((data, ctx) => {
+    const presentCount = [
+      data.LINKEDIN_CLIENT_ID,
+      data.LINKEDIN_CLIENT_SECRET,
+      data.LINKEDIN_REDIRECT_URI,
+    ].filter((v) => v != null && v !== '').length;
+    if (presentCount !== 0 && presentCount !== 3) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, and LINKEDIN_REDIRECT_URI must all be set together or all omitted (partial config is invalid; exchangeLinkedInCode requires all three).',
+      });
+    }
+  });
 
 export const env = createEnv({
   server: {
@@ -25,14 +61,25 @@ export const env = createEnv({
     DATABASE_SSL: booleanString.default(false),
     DATABASE_SSL_CA: z.string().optional(),
 
+    REDIS_URL: z.string().url().optional(),
+
     JWT_ACCESS_SECRET: z
       .string()
       .min(32, 'JWT_ACCESS_SECRET must be at least 32 chars'),
-    JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
+    JWT_ACCESS_EXPIRES_IN: durationString('15m'),
     JWT_REFRESH_SECRET: z
       .string()
       .min(32, 'JWT_REFRESH_SECRET must be at least 32 chars'),
-    JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+    JWT_REFRESH_EXPIRES_IN: durationString('7d'),
+    VERIFICATION_OTP_EXPIRES_IN: durationString('15m'),
+    VERIFICATION_RESEND_LIMIT_PER_HOUR: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(3),
+
+    PASSWORD_RESET_EXPIRES_IN: durationString('1h'),
+    PASSWORD_RESET_WEB_BASE_URL: z.string().url().optional(),
 
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
     SWAGGER_ENABLED: booleanString.default(true),
@@ -41,9 +88,45 @@ export const env = createEnv({
     SEED_ADMIN_EMAIL: z.email().default('admin@example.com'),
     SEED_ADMIN_PASSWORD: z.string().min(12).default('Admin@123456'),
     SEED_ADMIN_FULL_NAME: z.string().min(1).default('Admin User'),
+
+    /** Set together (linkedInOAuthEnvTrioSchema). */
+    LINKEDIN_CLIENT_ID: linkedInClientIdSchema,
+    LINKEDIN_CLIENT_SECRET: linkedInClientSecretSchema,
+    LINKEDIN_REDIRECT_URI: linkedInRedirectUriSchema,
+    /** Outbound LinkedIn token/userinfo fetch: time to wait for response headers. */
+    LINKEDIN_HTTP_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(15_000),
+    /** Max bytes read from each LinkedIn JSON response body (stream cap). */
+    LINKEDIN_HTTP_MAX_BODY_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(262_144),
+    GOOGLE_CLIENT_ID: z.string().min(1),
+    GOOGLE_CLIENT_SECRET: z.string().min(1),
+    GOOGLE_CALLBACK_URL: z.string().min(1),
+    GOOGLE_DEFAULT_COUNTRY: z.string().default('Unknown'),
+
+    FRONTEND_URL: z.string().default('http://localhost:5173'),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
 });
+
+linkedInOAuthEnvTrioSchema.parse({
+  LINKEDIN_CLIENT_ID: env.LINKEDIN_CLIENT_ID,
+  LINKEDIN_CLIENT_SECRET: env.LINKEDIN_CLIENT_SECRET,
+  LINKEDIN_REDIRECT_URI: env.LINKEDIN_REDIRECT_URI,
+});
+
+/**
+ * ESLint safe
+ */
+export const linkedInHttpTimeoutMs: number = env.LINKEDIN_HTTP_TIMEOUT_MS;
+export const linkedInHttpMaxBodyBytes: number =
+  env.LINKEDIN_HTTP_MAX_BODY_BYTES;
 
 export type Env = typeof env;

@@ -6,10 +6,11 @@ services:
     env_file:
       - ../.env
     ports:
-      - "3000:3000"
+      - '3000:3000'
     command: pnpm start:prod:migrate
     depends_on:
       - postgres
+      - redis
 
   postgres:
     image: postgres:16-alpine
@@ -18,9 +19,15 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: nestjs_starter
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory-policy noeviction
+    ports:
+      - '6379:6379'
 
 volumes:
   postgres_data:

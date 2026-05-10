@@ -14,7 +14,10 @@ import mailConfig from './config/mail.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
+import { CandidateModule } from './modules/candidate/candidate.module';
+import { EmployerModule } from './modules/employer/employer.module';
 import { HealthModule } from './modules/health/health.module';
+import { InquiriesModule } from './modules/inquiries/inquiries.module';
 import { MailModule } from './modules/mail/mail.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProbeController } from './probe.controller';
@@ -32,8 +35,11 @@ import { WelcomeController } from './welcome.controller';
         configService.getOrThrow<TypeOrmModuleOptions>('database'),
     }),
     HealthModule,
+    InquiriesModule,
     UsersModule,
     AuthModule,
+    CandidateModule,
+    EmployerModule,
     MailModule,
   ],
   providers: [

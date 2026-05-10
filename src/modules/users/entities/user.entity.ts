@@ -5,13 +5,16 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { OAuthUser } from './user-oauth-account.entity';
 
 export enum UserRole {
   ADMIN = 'admin',
-  USER = 'user',
+  CANDIDATE = 'candidate',
+  EMPLOYER = 'employer',
 }
 
 @Entity('users')
@@ -25,8 +28,8 @@ export class User {
   email: string;
 
   @Exclude()
-  @Column({ type: 'varchar', length: 255 })
-  password: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  password: string | null;
 
   @ApiProperty()
   @Column({ type: 'varchar', length: 255 })
@@ -40,29 +43,49 @@ export class User {
   @Column({ type: 'varchar', length: 500, nullable: true })
   avatar_url: string | null;
 
+  @ApiProperty({ example: 'Nigeria' })
+  @Column({ type: 'varchar', length: 100 })
+  country: string;
+
+  @ApiProperty({ default: false })
+  @Column({ type: 'boolean', default: false })
+  is_verified: boolean;
+
+  @ApiProperty({ default: false })
+  @Column({ type: 'boolean', default: false })
+  onboarding_complete: boolean;
+
   @ApiProperty()
   @Expose()
   get fullname(): string {
     return `${this.first_name} ${this.last_name}`.trim();
   }
 
-  @ApiProperty({ enum: UserRole, default: UserRole.USER })
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
+  @ApiProperty({ enum: UserRole, default: UserRole.CANDIDATE })
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.CANDIDATE })
   role: UserRole;
 
   @Exclude()
-  @Column({ type: 'varchar', length: 500, nullable: true, name: 'refresh_token_hash' })
+  @Column({
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+    name: 'refresh_token_hash',
+  })
   refreshTokenHash: string | null;
 
+  @OneToMany(() => OAuthUser, (oauthAccount: OAuthUser) => oauthAccount.user)
+  oauthAccounts: OAuthUser[];
+
   @ApiProperty()
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamp with time zone' })
   createdAt: Date;
 
   @ApiProperty()
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp with time zone' })
   updatedAt: Date;
 
   @Exclude()
-  @DeleteDateColumn({ name: 'deleted_at' })
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamp with time zone' })
   deletedAt: Date | null;
 }

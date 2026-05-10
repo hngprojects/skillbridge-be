@@ -3,60 +3,324 @@ import {
   Controller,
   Get,
   HttpCode,
+  HttpException,
   HttpStatus,
+  Param,
   Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+  ValidationPipe,
 } from '@nestjs/common';
 import {
-  ApiBearerAuth,
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+  ApiCookieAuth,
+  ApiForbiddenResponse,
   ApiOperation,
+  ApiResponse,
+  ApiTooManyRequestsResponse,
   ApiTags,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
+import { type Request, type Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import {
+  clearOAuthSignupRoleCookie,
+  clearAuthCookies,
+  OAUTH_SIGNUP_ROLE_COOKIE,
+  readCookie,
+  REFRESH_TOKEN_COOKIE,
+  setAuthCookies,
+} from './auth.cookies';
 import { AuthService } from './auth.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { GoogleOAuthGuard } from './guards/google-auth.guard';
 import { LoginDto } from './dto/login.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { LinkedInCallbackQueryDto } from './dto/linkedin-callback-query.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { OAuthSignupRoleRequiredException } from './exceptions/oauth-signup-role-required.exception';
+
+const linkedInCallbackQueryPipe = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+  transformOptions: { enableImplicitConversion: false },
+});
+import type { GoogleProfile } from './strategies/google.strategy';
+import { isOAuthSignupRole, type OAuthSignupRole } from './oauth-signup-role';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  private parseOAuthSignupRole(role: string): OAuthSignupRole {
+    if (!isOAuthSignupRole(role)) {
+      throw new HttpException(
+        'Invalid OAuth signup role',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return role;
+  }
+
   @Public()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user' })
-  register(@Body() dto: RegisterDto) {
+  @ApiConflictResponse({ description: 'Email already registered' })
+  async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify an email address with an OTP' })
+  @ApiBadRequestResponse({ description: 'Invalid or expired otp' })
+  async verifyEmail(
+    @Body() dto: VerifyEmailDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.verifyEmail(dto);
+    setAuthCookies(response, result.tokens);
+    return {
+      message: result.message,
+      user: result.user,
+    };
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend the email verification OTP' })
+  @ApiBadRequestResponse({ description: 'Account is already verified' })
+  @ApiTooManyRequestsResponse({
+    description: 'Too many requests. Please wait before trying again.',
+  })
+  async resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto);
+  }
+
+  @Public()
+  @Get('linkedin')
+  @ApiOperation({
+    summary: 'Initiate LinkedIn OAuth',
+    description: 'Redirects the browser to the LinkedIn consent screen.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to LinkedIn authorization',
+  })
+  @ApiResponse({
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    description: 'LinkedIn OAuth is not configured',
+  })
+  linkedIn(@Res() res: Response): void {
+    this.authService.applyLinkedInOAuthStart(res);
+  }
+
+  @Public()
+  @Get('linkedin/signup/:role')
+  @ApiOperation({
+    summary: 'Initiate LinkedIn OAuth for a specific signup path',
+    description:
+      'Redirects the browser to LinkedIn and preserves whether the user entered through the candidate or employer path.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to LinkedIn authorization',
+  })
+  linkedInForRole(@Param('role') role: string, @Res() res: Response): void {
+    this.authService.applyLinkedInOAuthStart(
+      res,
+      this.parseOAuthSignupRole(role),
+    );
+  }
+
+  @Public()
+  @Get('linkedin/callback')
+  @ApiOperation({
+    summary: 'LinkedIn OAuth callback',
+    description:
+      'Exchanges the code, sets auth cookies, then redirects to the role-based onboarding or application path.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description:
+      'Redirect to SPA: /candidate/onboarding or /employer/onboarding when setup is incomplete; otherwise /dashboard, /discovery, or /admin. Auth cookies set on this response.',
+  })
+  async linkedInCallback(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query(linkedInCallbackQueryPipe) query: LinkedInCallbackQueryDto,
+  ): Promise<void> {
+    await this.authService.handleLinkedInOAuthCallback(req, res, {
+      code: query.code,
+      state: query.state,
+      error: query.error,
+    });
   }
 
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Log in with email and password' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  @ApiForbiddenResponse({
+    description: 'Please verify your email to continue',
+  })
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.login(dto);
+    setAuthCookies(response, result.tokens);
+    return this.authService.toResponse(result);
+  }
+
+  @Public()
+  @UseGuards(ThrottlerGuard)
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request a password reset email' })
+  @ApiTooManyRequestsResponse({
+    description: 'Too many requests — limit is 5 per minute per IP',
+  })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set a new password using a reset token' })
+  @ApiBadRequestResponse({
+    description: 'Invalid, expired, or already used token',
+  })
+  @ApiUnprocessableEntityResponse({
+    description: 'Passwords do not match',
+  })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
+
+  @Public()
+  @Get('google')
+  @UseGuards(GoogleOAuthGuard)
+  @ApiOperation({
+    summary: 'Initiate Google OAuth',
+    description: 'Redirects the browser to the Google consent screen.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to Google authorization',
+  })
+  async googleAuth() {}
+
+  @Public()
+  @Get('google/signup/:role')
+  @UseGuards(GoogleOAuthGuard)
+  @ApiOperation({
+    summary: 'Initiate Google OAuth for a specific signup path',
+    description:
+      'Redirects the browser to Google and preserves whether the user entered through the candidate or employer path.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to Google authorization',
+  })
+  googleAuthForRole(@Param('role') role: string) {
+    this.parseOAuthSignupRole(role);
+  }
+
+  @Public()
+  @Get('google/callback')
+  @UseGuards(GoogleOAuthGuard)
+  @ApiOperation({
+    summary: 'Google OAuth callback',
+    description:
+      'Handles the Google OAuth callback, creates or logs in the user, sets auth cookies, then redirects to the appropriate frontend route based on role and onboarding status.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description:
+      'Redirect to frontend: /candidate/onboarding or /employer/onboarding if setup incomplete; /discovery for employers, /admin for admins, or /dashboard for candidates if complete. Auth cookies set on this response.',
+  })
+  async googleAuthRedirect(
+    @Req() request: Request & { user: GoogleProfile },
+    @Res() response: Response,
+  ) {
+    const signupRoleCookie = readCookie(request, OAUTH_SIGNUP_ROLE_COOKIE);
+    const signupRole = isOAuthSignupRole(signupRoleCookie)
+      ? signupRoleCookie
+      : undefined;
+
+    try {
+      const result = await this.authService.googleCallback(
+        request.user,
+        signupRole,
+      );
+      clearOAuthSignupRoleCookie(response);
+      setAuthCookies(response, result.tokens);
+      return response.redirect(
+        this.authService.buildFrontendRedirectUrl(result.data.user),
+      );
+    } catch (error: unknown) {
+      clearOAuthSignupRoleCookie(response);
+      const key =
+        error instanceof OAuthSignupRoleRequiredException
+          ? 'oauth_role_required'
+          : 'oauth_failed';
+      return response.redirect(
+        HttpStatus.FOUND,
+        `${this.authService.getFrontendOrigin()}/login?error=${key}`,
+      );
+    }
   }
 
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Issue a new access token from a refresh token' })
-  refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(dto.refresh_token);
+  @ApiOperation({ summary: 'Issue new auth cookies from the refresh cookie' })
+  async refresh(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const refreshToken = readCookie(request, REFRESH_TOKEN_COOKIE);
+    const result = await this.authService.refresh(refreshToken);
+    setAuthCookies(response, result.tokens);
+    return {
+      message: result.message,
+      status: 'success',
+    };
   }
 
-  @ApiBearerAuth()
+  @Public()
   @Post('logout')
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Revoke the current refresh token' })
-  logout(@CurrentUser('sub') userId: string) {
-    return this.authService.logout(userId);
+  async logout(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const refreshToken = readCookie(request, REFRESH_TOKEN_COOKIE);
+    await this.authService.logoutByRefreshToken(refreshToken);
+    clearAuthCookies(response);
+    return {
+      message: 'Logged out',
+      status: 'success',
+    };
   }
 
-  @ApiBearerAuth()
+  @ApiCookieAuth()
   @Get('me')
   @ApiOperation({ summary: 'Return the current authenticated user' })
   me(@CurrentUser() user: AuthenticatedUser) {
