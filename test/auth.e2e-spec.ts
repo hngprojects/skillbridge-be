@@ -41,6 +41,7 @@ type RegisterPayload = {
   email: string;
   country: string;
   password: string;
+  role: UserRole.CANDIDATE | UserRole.EMPLOYER;
 };
 
 type LoginPayload = {
@@ -63,6 +64,7 @@ const registerPayload: RegisterPayload = {
   email: 'jane@example.com',
   country: 'Nigeria',
   password: 'StrongPass123',
+  role: UserRole.CANDIDATE,
 };
 
 const loginPayload: LoginPayload = {
@@ -90,7 +92,7 @@ class InMemoryUsersService {
       avatar_url: dto.profile_pic_url ?? null,
       is_verified: false,
       onboarding_complete: false,
-      role: UserRole.CANDIDATE,
+      role: dto.role ?? UserRole.CANDIDATE,
       refreshTokenHash: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -401,6 +403,7 @@ describe('Auth (e2e)', () => {
 
     const createdUser = await usersService.findByEmail(registerPayload.email);
     expect(createdUser?.is_verified).toBe(false);
+    expect(createdUser?.role).toBe(registerPayload.role);
     expect(mailService.verificationMessages).toHaveLength(1);
     expect(mailService.verificationMessages[0]?.to).toBe(registerPayload.email);
   });
@@ -490,6 +493,22 @@ describe('Auth (e2e)', () => {
     });
   });
 
+  it('POST /auth/register persists the selected employer role', async () => {
+    const employerPayload: RegisterPayload = {
+      ...registerPayload,
+      email: 'employer@example.com',
+      role: UserRole.EMPLOYER,
+    };
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(employerPayload)
+      .expect(201);
+
+    const createdUser = await usersService.findByEmail(employerPayload.email);
+    expect(createdUser?.role).toBe(UserRole.EMPLOYER);
+  });
+
   it('POST /auth/register rejects duplicate emails', async () => {
     await request(app.getHttpServer())
       .post('/auth/register')
@@ -554,7 +573,7 @@ describe('Auth (e2e)', () => {
         last_name: registerPayload.lastName,
         fullname: `${registerPayload.firstName} ${registerPayload.lastName}`,
         country: registerPayload.country,
-        role: UserRole.CANDIDATE,
+        role: registerPayload.role,
         is_verified: true,
         onboardingComplete: false,
       },
