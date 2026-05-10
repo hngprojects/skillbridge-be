@@ -60,7 +60,6 @@ import {
 } from './linkedin-oauth.service';
 import { PasswordResetQueueService } from './password-reset-queue.service';
 import { GoogleProfile } from './strategies/google.strategy';
-import { PasswordResetQueueService } from './password-reset-queue.service';
 
 export interface AuthUser {
   id: string;
