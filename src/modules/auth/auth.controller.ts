@@ -50,8 +50,6 @@ const linkedInCallbackQueryPipe = new ValidationPipe({
   transformOptions: { enableImplicitConversion: false },
 });
 import type { GoogleProfile } from './strategies/google.strategy';
-import { env } from '../../config/env';
-import { UserRole } from '../users/entities/user.entity';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -199,7 +197,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Google OAuth callback',
     description:
-      'Handles the Google OAuth callback, creates or logs in the user, sets auth cookies, then redirects to the appropriate dashboard based on role and onboarding status.',
+      'Handles the Google OAuth callback, creates or logs in the user, sets auth cookies, then redirects to the appropriate frontend route based on role and onboarding status.',
   })
   @ApiResponse({
     status: HttpStatus.FOUND,
@@ -212,24 +210,9 @@ export class AuthController {
   ) {
     const result = await this.authService.googleCallback(request.user);
     setAuthCookies(response, result.tokens);
-    const { role, onboardingComplete } = result.data.user;
-
-    // redirect based on role + onboarding status
-    if (!onboardingComplete) {
-      if (role === UserRole.EMPLOYER) {
-        return response.redirect(`${env.FRONTEND_URL}/employer/onboarding`);
-      }
-      return response.redirect(`${env.FRONTEND_URL}/candidate/onboarding`);
-    }
-
-    // onboarding complete - redirect to role-specific dashboard
-    if (role === UserRole.EMPLOYER) {
-      return response.redirect(`${env.FRONTEND_URL}/discovery`);
-    }
-    if (role === UserRole.ADMIN) {
-      return response.redirect(`${env.FRONTEND_URL}/admin`);
-    }
-    return response.redirect(`${env.FRONTEND_URL}/dashboard`);
+    return response.redirect(
+      this.authService.buildFrontendRedirectUrl(result.data.user),
+    );
   }
 
   @Public()

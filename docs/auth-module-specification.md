@@ -403,7 +403,7 @@ Provider redirects to:
   │   ── CASE 1: OAuth account found ──────────────────────────────────────────
   │   │   This is a returning OAuth user. Fetch the linked users row.
   │   │   Issue access token + set refresh cookie.
-  │   │   Response: **302** to `{CORS_ORIGIN}` + path from Post-login Redirect Logic; cookies set on response
+  │   │   Response: **302** to `{FRONTEND_URL}` + path from Post-login Redirect Logic; cookies set on response
   │   │   (onboarding incomplete → `/onboarding/role-select`; else role → `/dashboard` | `/discovery` | `/admin`)
   │   │
   │   └── OAuth account NOT found → check users WHERE email = $email
@@ -694,7 +694,7 @@ If **all three** variables are **omitted**, the app still starts. In that case, 
 
 **Callback success response:**
 
-`302 Found` — `Location` is `{first CORS_ORIGIN}{path}` per **Post-login Redirect Logic**:
+`302 Found` — `Location` is `{FRONTEND_URL}{path}` per **Post-login Redirect Logic**:
 
 - `onboardingComplete === false` → `/onboarding/role-select`
 - `onboardingComplete === true` and `role === candidate` → `/dashboard`
@@ -705,7 +705,7 @@ If **all three** variables are **omitted**, the app still starts. In that case, 
 
 **Callback error responses (browser redirect):**
 
-The callback is a full-page browser navigation. Failures use **`302 Found`** to **`{first CORS_ORIGIN}/login`** with an `error` query param and clear **`linkedin_oauth_state`**. Do **not** expect **`503` JSON** from the callback (including `ServiceUnavailableException` from token exchange — it is caught and mapped here).
+The callback is a full-page browser navigation. Failures use **`302 Found`** to **`{FRONTEND_URL}/login`** with an `error` query param and clear **`linkedin_oauth_state`**. Do **not** expect **`503` JSON** from the callback (including `ServiceUnavailableException` from token exchange — it is caught and mapped here).
 
 | Situation | `Location` (relative to first CORS origin) |
 | --------- | -------------------------------------------- |

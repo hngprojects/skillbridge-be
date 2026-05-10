@@ -475,7 +475,7 @@ export class AuthService {
 
       response.redirect(
         HttpStatus.FOUND,
-        `${this.getFrontendOrigin()}${this.getPostLoginRedirectPath(result.data.user)}`,
+        this.buildFrontendRedirectUrl(result.data.user),
       );
     } catch (error: unknown) {
       const message =
@@ -529,7 +529,11 @@ export class AuthService {
   }
 
   getFrontendOrigin(): string {
-    return env.CORS_ORIGIN.split(',')[0]?.trim() || 'http://localhost:3000';
+    return env.FRONTEND_URL;
+  }
+
+  buildFrontendRedirectUrl(user: AuthUser): string {
+    return `${this.getFrontendOrigin()}${this.getPostLoginRedirectPath(user)}`;
   }
 
   /** Post-login redirect based on the user's persisted role. */
