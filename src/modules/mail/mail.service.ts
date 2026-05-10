@@ -9,9 +9,7 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly client = new Resend(env.RESEND_API_KEY);
 
-  constructor(
-    private readonly outboundEmailQueue: OutboundEmailQueueService,
-  ) {}
+  constructor(private readonly outboundEmailQueue: OutboundEmailQueueService) {}
 
   async send({ to, subject, html, text, from }: SendMailOptions) {
     if (!html && !text) {

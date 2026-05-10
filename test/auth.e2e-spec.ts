@@ -270,7 +270,10 @@ class InMemoryUsersService {
     signupRole?: UserRole.CANDIDATE | UserRole.EMPLOYER,
   ): Promise<User> {
     // Check if OAuth account already exists
-    const linked = await this.findOauthAccountWithUser(provider, profile.providerId);
+    const linked = await this.findOauthAccountWithUser(
+      provider,
+      profile.providerId,
+    );
     if (linked) {
       return linked.user;
     }
@@ -282,7 +285,11 @@ class InMemoryUsersService {
       if (!byEmail.is_verified) {
         await this.markVerified(byEmail.id);
       }
-      await this.linkOauthAccountToUser(byEmail.id, provider, profile.providerId);
+      await this.linkOauthAccountToUser(
+        byEmail.id,
+        provider,
+        profile.providerId,
+      );
       return this.findOne(byEmail.id);
     }
 
