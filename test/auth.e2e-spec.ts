@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ExecutionContext,
   INestApplication,
@@ -21,6 +22,7 @@ import { env } from '../src/config/env';
 import { AuthController } from '../src/modules/auth/auth.controller';
 import {
   ACCESS_TOKEN_COOKIE,
+  OAUTH_SIGNUP_ROLE_COOKIE,
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
 import {
@@ -202,6 +204,7 @@ class InMemoryUsersService {
     avatar_url: string | null;
     provider: string;
     providerId: string;
+    role: UserRole.CANDIDATE | UserRole.EMPLOYER;
   }): Promise<User> {
     const result = await this.createOAuthUser(
       params.provider,
@@ -211,6 +214,7 @@ class InMemoryUsersService {
       params.email,
       'Unknown',
       params.avatar_url,
+      params.role,
     );
     return result.user;
   }
@@ -223,6 +227,7 @@ class InMemoryUsersService {
     email: string,
     country: 'Unknown',
     avatar_url?: string | null,
+    role: UserRole = UserRole.CANDIDATE,
   ): Promise<{ user: User; oauthUser: OAuthUser }> {
     const user = Object.assign(new User(), {
       id: `user-${this.nextId++}`,
@@ -234,7 +239,7 @@ class InMemoryUsersService {
       avatar_url: avatar_url ?? null,
       is_verified: true,
       onboarding_complete: false,
-      role: UserRole.CANDIDATE,
+      role,
       refreshTokenHash: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -262,6 +267,7 @@ class InMemoryUsersService {
       lastName: string;
       avatarUrl: string | null;
     },
+    signupRole?: UserRole.CANDIDATE | UserRole.EMPLOYER,
   ): Promise<User> {
     // Check if OAuth account already exists
     const linked = await this.findOauthAccountWithUser(provider, profile.providerId);
@@ -281,6 +287,9 @@ class InMemoryUsersService {
     }
 
     // Create new user with OAuth link
+    if (!signupRole) {
+      throw new BadRequestException('OAuth signup role required');
+    }
     return await this.createVerifiedUserWithOauthLink({
       email: profile.email,
       first_name: profile.firstName,
@@ -289,6 +298,7 @@ class InMemoryUsersService {
       avatar_url: profile.avatarUrl,
       provider,
       providerId: profile.providerId,
+      role: signupRole,
     });
   }
 }
@@ -1080,10 +1090,11 @@ describe('Google OAuth callback (e2e)', () => {
   it('GET /auth/google/callback creates a brand-new user on first login', async () => {
     const response = await request(app.getHttpServer())
       .get('/auth/google/callback')
+      .set('Cookie', `${OAUTH_SIGNUP_ROLE_COOKIE}=employer`)
       .expect(302);
 
     expect(response.headers['location']).toContain(env.FRONTEND_URL);
-    expect(response.headers['location']).toContain('/onboarding');
+    expect(response.headers['location']).toContain('/employer/onboarding');
     const cookies = getSetCookies(response);
     expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
 
@@ -1091,5 +1102,19 @@ describe('Google OAuth callback (e2e)', () => {
     expect(newUser).not.toBeNull();
     expect(newUser?.is_verified).toBe(true);
     expect(newUser?.first_name).toBe(googleProfile.firstName);
+    expect(newUser?.role).toBe(UserRole.EMPLOYER);
+  });
+
+  it('GET /auth/google/callback redirects with oauth_role_required for brand-new users without role context', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/auth/google/callback')
+      .expect(302);
+
+    expect(response.headers['location']).toBe(
+      `${env.FRONTEND_URL}/login?error=oauth_role_required`,
+    );
+
+    const newUser = await usersService.findByEmail(googleProfile.email);
+    expect(newUser).toBeNull();
   });
 });
