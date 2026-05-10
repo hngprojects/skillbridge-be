@@ -11,7 +11,7 @@ import type {
   UserOauthProvisioning,
 } from './user-oauth-provisioning.types';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import { DataSource, EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { UserModelAction } from './actions/user.action';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PaginationDto } from './dto/pagination.dto';
@@ -156,6 +156,30 @@ export class UsersService {
       updatePayload: { onboarding_complete: true },
     });
     return this.findOne(id);
+  }
+
+  async getUserForOnboarding(
+    manager: EntityManager,
+    id: string,
+  ): Promise<User> {
+    const user = await manager.findOne(User, {
+      where: { id },
+    });
+    if (!user) {
+      throw new NotFoundException(`User ${id} not found`);
+    }
+    return user;
+  }
+
+  async markOnboardingCompleteWithManager(
+    manager: EntityManager,
+    id: string,
+  ): Promise<void> {
+    await manager.update(
+      User,
+      { id },
+      { onboarding_complete: true },
+    );
   }
 
   rotateRefreshTokenHash(

@@ -24,7 +24,12 @@ export class GoogleOAuthGuard extends AuthGuard('google') {
       params?: { role?: string };
     }>();
     const response = context.switchToHttp().getResponse<Response>();
+    const path = request.path ?? '';
     const role = request.params?.role;
+
+    if (!path.includes('/google/signup/')) {
+      return super.canActivate(context);
+    }
 
     if (role !== undefined) {
       if (!isOAuthSignupRole(role)) {
