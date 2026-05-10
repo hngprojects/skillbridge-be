@@ -23,7 +23,7 @@ import {
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import type { Request, Response } from 'express';
+import { type Request, type Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -35,6 +35,7 @@ import {
 } from './auth.cookies';
 import { AuthService } from './auth.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { GoogleOAuthGuard } from './guards/google-auth.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
@@ -48,6 +49,9 @@ const linkedInCallbackQueryPipe = new ValidationPipe({
   transform: true,
   transformOptions: { enableImplicitConversion: false },
 });
+import type { GoogleProfile } from './strategies/google.strategy';
+import { env } from '../../config/env';
+import { UserRole } from '../users/entities/user.entity';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -174,6 +178,58 @@ export class AuthController {
   })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @Public()
+  @Get('google')
+  @UseGuards(GoogleOAuthGuard)
+  @ApiOperation({
+    summary: 'Initiate Google OAuth',
+    description: 'Redirects the browser to the Google consent screen.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirect to Google authorization',
+  })
+  async googleAuth() {}
+
+  @Public()
+  @Get('google/callback')
+  @UseGuards(GoogleOAuthGuard)
+  @ApiOperation({
+    summary: 'Google OAuth callback',
+    description:
+      'Handles the Google OAuth callback, creates or logs in the user, sets auth cookies, then redirects to the appropriate dashboard based on role and onboarding status.',
+  })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description:
+      'Redirect to frontend: /candidate/onboarding or /employer/onboarding if setup incomplete; /discovery for employers, /admin for admins, or /dashboard for candidates if complete. Auth cookies set on this response.',
+  })
+  async googleAuthRedirect(
+    @Req() request: Request & { user: GoogleProfile },
+    @Res() response: Response,
+  ) {
+    const result = await this.authService.googleCallback(request.user);
+    setAuthCookies(response, result.tokens);
+    const { role, onboardingComplete } = result.data.user;
+
+    // redirect based on role + onboarding status
+    if (!onboardingComplete) {
+      if (role === UserRole.EMPLOYER) {
+        return response.redirect(`${env.FRONTEND_URL}/employer/onboarding`);
+      }
+      return response.redirect(`${env.FRONTEND_URL}/candidate/onboarding`);
+    }
+
+    // onboarding complete - redirect to role-specific dashboard
+    if (role === UserRole.EMPLOYER) {
+      return response.redirect(`${env.FRONTEND_URL}/discovery`);
+    }
+    if (role === UserRole.ADMIN) {
+      return response.redirect(`${env.FRONTEND_URL}/admin`);
+    }
+    return response.redirect(`${env.FRONTEND_URL}/dashboard`);
   }
 
   @Public()

@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import { PasswordResetToken } from './entities/password-reset-token.entity';
 import { VerificationOtp } from './entities/verification-otp.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
 import { VerificationOtpService } from './verification-otp.service';
 import { PasswordResetQueueService } from './password-reset-queue.service';
 
@@ -32,6 +33,7 @@ import { PasswordResetQueueService } from './password-reset-queue.service';
     AuthService,
     PasswordResetQueueService,
     JwtStrategy,
+    GoogleStrategy,
     VerificationOtpService,
   ],
   exports: [AuthService],

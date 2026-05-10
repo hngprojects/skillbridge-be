@@ -59,12 +59,8 @@ import {
   parseLinkedInTokenResponse,
 } from './linkedin-oauth.service';
 import { PasswordResetQueueService } from './password-reset-queue.service';
-
-export interface Organisation {
-  id: string;
-  name: string;
-  [key: string]: unknown;
-}
+import { GoogleProfile } from './strategies/google.strategy';
+import { PasswordResetQueueService } from './password-reset-queue.service';
 
 export interface AuthUser {
   id: string;
@@ -88,7 +84,6 @@ export interface AuthSession {
   message: string;
   data: {
     user: AuthUser;
-    organisations: Organisation[];
   };
 }
 
@@ -136,7 +131,6 @@ export interface OAuthProfilePayload {
   lastName: string;
   avatarUrl: string | null;
 }
-
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -192,7 +186,7 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired otp');
     }
 
-    const verifiedUser = user.is_verified
+    const verifiedUser: User = user.is_verified
       ? user
       : await this.usersService.markVerified(user.id);
     const tokens = await this.signTokens(verifiedUser);
@@ -254,10 +248,7 @@ export class AuthService {
       });
     }
 
-    if (!user.password) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
+    if (!user.password) throw new UnauthorizedException('Invalid credentials');
     const valid = await argon2.verify(user.password, dto.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
@@ -363,6 +354,19 @@ export class AuthService {
       status: 'success',
       message: 'Password updated. Please log in.',
     };
+  }
+
+  async googleCallback(profile: GoogleProfile): Promise<AuthResult> {
+    // Normalize GoogleProfile to OAuthProfilePayload format
+    const normalizedProfile: OAuthProfilePayload = {
+      providerId: profile.providerId,
+      email: profile.email,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      avatarUrl: profile.picture,
+    };
+
+    return this.finalizeOAuthLogin('google', normalizedProfile);
   }
 
   async refresh(
@@ -758,7 +762,6 @@ export class AuthService {
       message,
       data: {
         user: this.toAuthUser(user),
-        organisations: [],
       },
       tokens,
     };
