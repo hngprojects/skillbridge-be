@@ -29,10 +29,13 @@ import { MailService } from '../mail/mail.service';
 import { User, UserRole } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import {
+  clearOAuthSignupRoleCookie,
   clearLinkedInOAuthStateCookie,
   LINKEDIN_OAUTH_STATE_COOKIE,
+  OAUTH_SIGNUP_ROLE_COOKIE,
   readCookie,
   setAuthCookies,
+  setOAuthSignupRoleCookie,
   setLinkedInOAuthStateCookie,
 } from './auth.cookies';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -57,6 +60,8 @@ import {
 } from './linkedin-oauth.service';
 import { PasswordResetQueueService } from './password-reset-queue.service';
 import { GoogleProfile } from './strategies/google.strategy';
+import { isOAuthSignupRole, type OAuthSignupRole } from './oauth-signup-role';
+import { OAuthSignupRoleRequiredException } from './exceptions/oauth-signup-role-required.exception';
 
 export interface AuthUser {
   id: string;
@@ -323,7 +328,10 @@ export class AuthService {
     };
   }
 
-  async googleCallback(profile: GoogleProfile): Promise<AuthResult> {
+  async googleCallback(
+    profile: GoogleProfile,
+    signupRole?: OAuthSignupRole,
+  ): Promise<AuthResult> {
     // Normalize GoogleProfile to OAuthProfilePayload format
     const normalizedProfile: OAuthProfilePayload = {
       providerId: profile.providerId,
@@ -333,7 +341,7 @@ export class AuthService {
       avatarUrl: profile.picture,
     };
 
-    return this.finalizeOAuthLogin('google', normalizedProfile);
+    return this.finalizeOAuthLogin('google', normalizedProfile, signupRole);
   }
 
   async refresh(
@@ -441,9 +449,17 @@ export class AuthService {
     };
   }
 
-  applyLinkedInOAuthStart(response: ExpressResponse): void {
+  applyLinkedInOAuthStart(
+    response: ExpressResponse,
+    signupRole?: OAuthSignupRole,
+  ): void {
     const start = this.createLinkedInOAuthStart();
     setLinkedInOAuthStateCookie(response, start.state);
+    if (signupRole) {
+      setOAuthSignupRoleCookie(response, signupRole);
+    } else {
+      clearOAuthSignupRoleCookie(response);
+    }
     response.redirect(start.authorizationUrl);
   }
 
@@ -453,9 +469,14 @@ export class AuthService {
     query: { code?: string; state?: string; error?: string },
   ): Promise<void> {
     const frontend = this.getFrontendOrigin();
+    const signupRoleCookie = readCookie(request, OAUTH_SIGNUP_ROLE_COOKIE);
+    const signupRole = isOAuthSignupRole(signupRoleCookie)
+      ? signupRoleCookie
+      : undefined;
 
     const redirectWithError = (key: string): void => {
       clearLinkedInOAuthStateCookie(response);
+      clearOAuthSignupRoleCookie(response);
       response.redirect(`${frontend}/login?error=${key}`);
     };
 
@@ -469,13 +490,15 @@ export class AuthService {
         code: query.code,
         state: query.state,
         stateCookie: readCookie(request, LINKEDIN_OAUTH_STATE_COOKIE),
+        signupRole,
       });
       clearLinkedInOAuthStateCookie(response);
+      clearOAuthSignupRoleCookie(response);
       setAuthCookies(response, result.tokens);
 
       response.redirect(
         HttpStatus.FOUND,
-        `${this.getFrontendOrigin()}${this.getPostLoginRedirectPath(result.data.user)}`,
+        this.buildFrontendRedirectUrl(result.data.user),
       );
     } catch (error: unknown) {
       const message =
@@ -486,7 +509,9 @@ export class AuthService {
         error instanceof BadRequestException &&
         error.message === 'Invalid OAuth state'
           ? 'oauth_state_mismatch'
-          : 'oauth_failed';
+          : error instanceof OAuthSignupRoleRequiredException
+            ? 'oauth_role_required'
+            : 'oauth_failed';
 
       redirectWithError(key);
     }
@@ -498,10 +523,12 @@ export class AuthService {
   async finalizeOAuthLogin(
     provider: string,
     profile: OAuthProfilePayload,
+    signupRole?: OAuthSignupRole,
   ): Promise<AuthResult> {
     const user = await this.usersService.resolveOAuthUserFromProviderProfile(
       provider,
       profile,
+      signupRole,
     );
     return this.issueTokens(user, 'Login successful');
   }
@@ -510,6 +537,7 @@ export class AuthService {
     code: string;
     state: string;
     stateCookie: string | undefined;
+    signupRole?: OAuthSignupRole;
   }): Promise<AuthResult> {
     if (!params.stateCookie || !params.state) {
       throw new BadRequestException('Invalid OAuth state');
@@ -525,11 +553,19 @@ export class AuthService {
 
     const accessToken = await this.exchangeLinkedInCode(params.code);
     const profile = await this.fetchLinkedInUserInfo(accessToken);
-    return this.finalizeOAuthLogin(OAUTH_PROVIDER_LINKEDIN, profile);
+    return this.finalizeOAuthLogin(
+      OAUTH_PROVIDER_LINKEDIN,
+      profile,
+      params.signupRole,
+    );
   }
 
   getFrontendOrigin(): string {
-    return env.CORS_ORIGIN.split(',')[0]?.trim() || 'http://localhost:3000';
+    return env.FRONTEND_URL;
+  }
+
+  buildFrontendRedirectUrl(user: AuthUser): string {
+    return `${this.getFrontendOrigin()}${this.getPostLoginRedirectPath(user)}`;
   }
 
   /** Post-login redirect based on the user's persisted role. */
