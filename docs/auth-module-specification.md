@@ -349,7 +349,7 @@ Step 1 — Request reset
     │     { status: "success", message: "If that email exists, a reset link has been sent" }
     │
     └── If email found in users:
-          Generate reset token (random UUID, 1hr TTL)
+          Generate opaque reset token (random bytes, base64url) with configured TTL
           Store: { user_id, token_hash, expires_at, used: false }
           Send reset token to user (out-of-band) — client submits it in JSON body to POST /auth/reset-password
 
@@ -358,7 +358,7 @@ Step 2 — Submit new password
     │
     ├── Look up token → not found/expired → 400 { status: "error", message: "Invalid or expired token" }
     ├── Check used flag → already used → 400 { status: "error", message: "Token already used" }
-    ├── Validate password === confirmPassword → mismatch → 422
+    ├── Validate password === confirmPassword (DTO) → mismatch → 400
     │
     ├── Hash new password → UPDATE users SET password_hash = $hash
     ├── Mark token as used
@@ -393,7 +393,7 @@ User clicks "Continue with Google" or "Continue with LinkedIn"
 ```
 Provider redirects to:
   GET /auth/google/callback?code=...
-  GET /auth/linkedin/callback?code=...
+  GET /auth/linkedin/callback?code=...&state=...
   │
   ├── Exchange authorization code for provider access token (server-side only)
   ├── Fetch user profile from provider: { provider_id, email, firstName, lastName }
@@ -403,8 +403,8 @@ Provider redirects to:
   │   ── CASE 1: OAuth account found ──────────────────────────────────────────
   │   │   This is a returning OAuth user. Fetch the linked users row.
   │   │   Issue access token + set refresh cookie.
-  │   │   Response: 200 { status: "success", data: { id, email, role, onboardingComplete } }
-  │   │   → Redirect based on onboardingComplete + role (same as email login)
+  │   │   Response: **302** to `{CORS_ORIGIN}` + path from Post-login Redirect Logic; cookies set on response
+  │   │   (onboarding incomplete → `/onboarding/role-select`; else role → `/dashboard` | `/discovery` | `/admin`)
   │   │
   │   └── OAuth account NOT found → check users WHERE email = $email
   │
@@ -414,7 +414,7 @@ Provider redirects to:
   │       │
   │       │   INSERT INTO user_oauth_accounts { user_id, provider, provider_id }
   │       │   Issue access token + set refresh cookie.
-  │       │   Response: 200 { status: "success", data: { id, email, role, onboardingComplete } }
+  │       │   Response: **302** to Post-login Redirect path; cookies set on response
   │       │
   │       │   ⚠ If onboardingComplete = false (edge case: user registered but never finished
   │       │     onboarding) → redirect to /onboarding/role-select as usual.
@@ -425,8 +425,7 @@ Provider redirects to:
   │                   is_verified: true, onboarding_complete: false }
   │               INSERT INTO user_oauth_accounts { user_id, provider, provider_id }
   │               Issue access token + set refresh cookie.
-  │               Response: 200 { status: "success", data: { ..., onboardingComplete: false } }
-  │               → Redirect to /onboarding/role-select
+  │               Response: **302** to `/onboarding/role-select` (new users); cookies set on response
 ```
 
 #### B3. Key differences from Email/Password flow
@@ -660,20 +659,59 @@ Initiate Google OAuth flow. Redirects to Google consent screen.
 
 ### `GET /auth/linkedin`
 
-Initiate LinkedIn OAuth flow. Redirects to LinkedIn consent screen.
+Initiate LinkedIn OAuth flow. Redirects the browser to LinkedIn’s authorization (consent) screen.
+
+**Response:** `302 Found` — `Location` is `https://www.linkedin.com/oauth/v2/authorization` with query parameters including `client_id`, `redirect_uri`, `scope` (`openid profile email`), `state`, and `response_type=code`.
+
+**Cookies (initiate step):** Sets `linkedin_oauth_state` (httpOnly, `SameSite=Lax`, ~10 minutes) for CSRF protection. The callback must verify the `state` query parameter against this cookie before exchanging the code.
+
+**Environment (`src/config/env.ts`):**
+
+`LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, and `LINKEDIN_REDIRECT_URI` must be **all set** or **all omitted**. If only one or two are set, the process **fails at startup** with a **`ZodError`** (the app never listens; you will not get an HTTP `503` from the API). 
+
+| Variable | Description |
+| -------- | ----------- |
+| `LINKEDIN_CLIENT_ID` | Client ID from the LinkedIn product / app |
+| `LINKEDIN_CLIENT_SECRET` | Client secret (used on the callback for token exchange) |
+| `LINKEDIN_REDIRECT_URI` | Full callback URL, must match the app’s authorized redirect URL (e.g. `http://localhost:3000/api/v1/auth/linkedin/callback`) |
+
+**Errors (initiate only, after a healthy boot):**
+
+If **all three** variables are **omitted**, the app still starts. In that case, **`GET /auth/linkedin`** cannot build the authorize URL and returns **`503`** via the global HTTP exception filter (not the raw Nest default body), for example:
+
+```json
+503  {
+       "success": false,
+       "status_code": 503,
+       "error": "Service Unavailable",
+       "message": "LinkedIn OAuth is not configured",
+       "path": "/api/v1/auth/linkedin",
+       "timestamp": "2026-05-09T12:00:00.000Z"
+     }
+```
 
 **Callback:** `GET /auth/linkedin/callback`
 
 **Callback success response:**
 
-```json
-200  {
-       "status": "success",
-       "user": { "id": "uuid", "email": "string", "role": "string", "onboardingComplete": "boolean" }
-     }
-```
+`302 Found` — `Location` is `{first CORS_ORIGIN}{path}` per **Post-login Redirect Logic**:
 
-> Sets `access_token` and `refresh_token` as httpOnly cookies.
+- `onboardingComplete === false` → `/onboarding/role-select`
+- `onboardingComplete === true` and `role === candidate` → `/dashboard`
+- `onboardingComplete === true` and `role === employer` → `/discovery`
+- `onboardingComplete === true` and `role === admin` → `/admin`
+
+> Sets `access_token` and `refresh_token` as httpOnly cookies on the redirect response.
+
+**Callback error responses (browser redirect):**
+
+The callback is a full-page browser navigation. Failures use **`302 Found`** to **`{first CORS_ORIGIN}/login`** with an `error` query param and clear **`linkedin_oauth_state`**. Do **not** expect **`503` JSON** from the callback (including `ServiceUnavailableException` from token exchange — it is caught and mapped here).
+
+| Situation | `Location` (relative to first CORS origin) |
+| --------- | -------------------------------------------- |
+| CSRF / state validation: `state` query does not match the `linkedin_oauth_state` cookie, or the cookie is missing while `state` is present | `/login?error=oauth_state_mismatch` |
+| User cancelled at LinkedIn, or provider returned an error, or required query params (`code`, `state`) are missing | `/login?error=oauth_cancelled` |
+| Other failures after state checks (e.g. token exchange, profile fetch, or “not fully configured” at exchange) | `/login?error=oauth_failed` |
 
 ---
 
@@ -731,6 +769,8 @@ Request a password reset link.
 
 > Always returns 200 regardless of whether the email exists (prevents enumeration).
 
+> When `REDIS_URL` is set, token issuance and password-reset email delivery run in BullMQ workers (Redis) so the handler returns without awaiting Argon2/DB/email I/O for the known-email case. Without `REDIS_URL`, the same work is scheduled on the Node event loop after the response is sent (still not awaited on the request path).
+
 ---
 
 ### `POST /auth/reset-password`
@@ -752,7 +792,8 @@ Set a new password using a reset token.
 ```json
 200  { "status": "success", "message": "Password updated. Please log in." }
 400  { "status": "error", "message": "Invalid or expired token" }
-422  { "status": "error", "message": "Passwords do not match" }
+400  { "status": "error", "message": "Token already used" }
+400  { "status": "error", "message": "Passwords do not match" }
 ```
 
 > All active refresh tokens for the user are revoked on success.
