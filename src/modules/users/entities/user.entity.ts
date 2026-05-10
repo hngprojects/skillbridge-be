@@ -13,9 +13,17 @@ import { OAuthUser } from './user-oauth-account.entity';
 
 export enum UserRole {
   ADMIN = 'admin',
+  TALENT = 'talent',
+  /** @deprecated Use TALENT. */
   CANDIDATE = 'candidate',
   EMPLOYER = 'employer',
 }
+
+export const USER_ROLE_VALUES = [
+  UserRole.ADMIN,
+  UserRole.TALENT,
+  UserRole.EMPLOYER,
+] as const;
 
 @Entity('users')
 export class User {
@@ -61,8 +69,8 @@ export class User {
     return `${this.first_name} ${this.last_name}`.trim();
   }
 
-  @ApiProperty({ enum: UserRole, default: UserRole.CANDIDATE })
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.CANDIDATE })
+  @ApiProperty({ enum: USER_ROLE_VALUES, default: UserRole.TALENT })
+  @Column({ type: 'enum', enum: USER_ROLE_VALUES, default: UserRole.TALENT })
   role: UserRole;
 
   @Exclude()
