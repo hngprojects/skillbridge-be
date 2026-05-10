@@ -1,7 +1,7 @@
 {
   "name": "skillbridge-be",
   "version": "0.0.1",
-  "description": "SkillBridge backend built from the HNG NestJS boilerplate conventions",
+  "description": "SkillBridge backend built from the HNG NestJS boilerplate conventions - addedd",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format": "prettier --write .",
     "prepare": "husky",
     "start": "nest start",
     "start:dev": "nest start --watch",
