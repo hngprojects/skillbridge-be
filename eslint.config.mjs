@@ -10,6 +10,7 @@ export default defineConfig(
     'coverage/**',
     'node_modules/**',
     'eslint.config.mjs',
+    'ecosystem.config.cjs',
   ]),
   eslint.configs.recommended,
   tseslint.configs.recommendedTypeChecked,

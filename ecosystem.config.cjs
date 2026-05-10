@@ -10,11 +10,11 @@ module.exports = {
 
       env_production: {
         NODE_ENV: 'production',
-        PORT: 3003,
+        PORT: process.env.PORT || 5001,
       },
       env_staging: {
         NODE_ENV: 'staging',
-        PORT: 3004,
+        PORT: process.env.PORT || 4001,
       },
     },
   ],
