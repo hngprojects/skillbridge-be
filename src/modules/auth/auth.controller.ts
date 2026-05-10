@@ -55,7 +55,10 @@ const linkedInCallbackQueryPipe = new ValidationPipe({
   transformOptions: { enableImplicitConversion: false },
 });
 import type { GoogleProfile } from './strategies/google.strategy';
-import { isOAuthSignupRole, type OAuthSignupRole } from './oauth-signup-role';
+import {
+  normalizeOAuthSignupRole,
+  type OAuthSignupRole,
+} from './oauth-signup-role';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -63,13 +66,14 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   private parseOAuthSignupRole(role: string): OAuthSignupRole {
-    if (!isOAuthSignupRole(role)) {
+    const normalizedRole = normalizeOAuthSignupRole(role);
+    if (!normalizedRole) {
       throw new HttpException(
         'Invalid OAuth signup role',
         HttpStatus.BAD_REQUEST,
       );
     }
-    return role;
+    return normalizedRole;
   }
 
   @Public()
@@ -133,7 +137,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Initiate LinkedIn OAuth for a specific signup path',
     description:
-      'Redirects the browser to LinkedIn and preserves whether the user entered through the candidate or employer path.',
+      'Redirects the browser to LinkedIn and preserves whether the user entered through the talent or employer path.',
   })
   @ApiResponse({
     status: HttpStatus.FOUND,
@@ -231,7 +235,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Initiate Google OAuth for a specific signup path',
     description:
-      'Redirects the browser to Google and preserves whether the user entered through the candidate or employer path.',
+      'Redirects the browser to Google and preserves whether the user entered through the talent or employer path.',
   })
   @ApiResponse({
     status: HttpStatus.FOUND,
@@ -252,16 +256,14 @@ export class AuthController {
   @ApiResponse({
     status: HttpStatus.FOUND,
     description:
-      'Redirect to frontend: /candidate/onboarding or /employer/onboarding if setup incomplete; /discovery for employers, /admin for admins, or /dashboard for candidates if complete. Auth cookies set on this response.',
+      'Redirect to frontend: /candidate/onboarding or /employer/onboarding if setup incomplete; /discovery for employers, /admin for admins, or /dashboard for talents if complete. Auth cookies set on this response.',
   })
   async googleAuthRedirect(
     @Req() request: Request & { user: GoogleProfile },
     @Res() response: Response,
   ) {
     const signupRoleCookie = readCookie(request, OAUTH_SIGNUP_ROLE_COOKIE);
-    const signupRole = isOAuthSignupRole(signupRoleCookie)
-      ? signupRoleCookie
-      : undefined;
+    const signupRole = normalizeOAuthSignupRole(signupRoleCookie);
 
     try {
       const result = await this.authService.googleCallback(

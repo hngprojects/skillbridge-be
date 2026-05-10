@@ -35,7 +35,7 @@ SkillBridge has three distinct roles, each with a different access surface:
 
 | Role        | Access                                                   |
 | ----------- | -------------------------------------------------------- |
-| `candidate` | Assessment pipeline, dashboard, verified profile         |
+| `talent`    | Assessment pipeline, dashboard, verified profile         |
 | `employer`  | Discovery dashboard, candidate profiles (Job Ready only) |
 | `admin`     | Moderation queue, submission review, scoring oversight   |
 
@@ -64,7 +64,7 @@ CREATE TABLE users (
   email               VARCHAR(255)  NOT NULL UNIQUE,
   password_hash       VARCHAR(255)  NULL,            -- NULL for OAuth-only accounts
   country             VARCHAR(100)  NOT NULL,
-  role                VARCHAR(20)   NOT NULL DEFAULT 'candidate', -- candidate | employer | admin
+  role                VARCHAR(20)   NOT NULL DEFAULT 'talent', -- talent | employer | admin
   is_verified         BOOLEAN       NOT NULL DEFAULT false,
   onboarding_complete BOOLEAN       NOT NULL DEFAULT false,
   created_at          TIMESTAMP     NOT NULL DEFAULT NOW()
@@ -174,7 +174,7 @@ Tokens are never returned in the response body. The client reads the user object
   "user": {
     "id": "uuid",
     "email": "string",
-    "role": "candidate | employer | admin",
+    "role": "talent | employer | admin",
     "onboardingComplete": false
   }
 }
@@ -185,7 +185,7 @@ Tokens are never returned in the response body. The client reads the user object
 ```json
 {
   "sub": "user-uuid",
-  "role": "candidate | employer | admin",
+  "role": "talent | employer | admin",
   "email": "user@email.com",
   "onboardingComplete": true,
   "iat": 1234567890,
@@ -199,7 +199,7 @@ Tokens are never returned in the response body. The client reads the user object
 1. Read role + onboardingComplete from user object in response body
 2. If onboardingComplete = false → redirect to /onboarding/role-select (all roles)
 3. If onboardingComplete = true:
-   - candidate → /dashboard
+   - talent → /dashboard
    - employer  → /discovery
    - admin     → /admin
 ```
@@ -246,7 +246,7 @@ There are two distinct signup/login paths. Both converge at the same onboarding 
 |                     | Flow A — Email / Password                     | Flow B — OAuth (Google / LinkedIn)     |
 | ------------------- | --------------------------------------------- | -------------------------------------- |
 | Entry point         | Registration form                             | "Continue with Google/LinkedIn" button |
-| Fields collected    | firstName, lastName, email, country, password | Pulled from provider profile           |
+| Fields collected    | firstName, lastName, email, password, role    | Pulled from provider profile           |
 | Email verification  | Manual — 15-minute OTP sent to inbox          | Automatic — provider pre-verifies      |
 | Password            | Required (Argon hashed, cost 12)              | Never set (`NULL`)                     |
 | Account conflict    | N/A                                           | Auto-link if email already exists      |
@@ -279,7 +279,7 @@ Both flows share:
 ```
 POST /auth/register
   │
-  ├── Validate request body (firstName, lastName, email, country, password)
+  ├── Validate request body (firstName, lastName, email, password, role)
   │     └── Fail → 422 { status: "error", message: "Validation failed", fields: [...] }
   │
   ├── Check if email already exists in users table
@@ -288,8 +288,8 @@ POST /auth/register
   ├── Hash password (Argon, cost factor 12)
   │
   ├── INSERT into users:
-  │     { first_name, last_name, email, password_hash, country,
-  │       role: null, is_verified: false, onboarding_complete: false }
+  │     { first_name, last_name, email, password_hash, country: "Unknown",
+  │       role: "talent" | "employer", is_verified: false, onboarding_complete: false }
   │
   ├── Generate email verification OTP (15-minute TTL; `VERIFICATION_OTP_EXPIRES_IN`, default `15m`)
   │     Store: { user_id, otp_hash, expires_at } in verification_otps table
@@ -492,10 +492,10 @@ POST /onboarding/role
   │
   ├── Validate onboardingComplete = false (if true → 403 { status: "error", message: "Already completed" })
   │
-  ├── IF role = "candidate":
+  ├── IF role = "talent":
   │     Validate roleTrack is present and valid
   │     INSERT INTO candidates { user_id, role_track, status: "not_started" }
-  │     UPDATE users SET role = "candidate", onboarding_complete = true
+  │     UPDATE users SET role = "talent", onboarding_complete = true
   │
   ├── IF role = "employer":
   │     Validate companyName is present
@@ -503,7 +503,7 @@ POST /onboarding/role
   │     UPDATE users SET role = "employer", onboarding_complete = true
   │
   ├── Reissue access token cookie with updated payload:
-  │     { ..., role: "candidate|employer", onboardingComplete: true }
+  │     { ..., role: "talent|employer", onboardingComplete: true }
   │
   └── Response: 200 { redirectTo: "/dashboard" | "/discovery" }
 ```
@@ -533,8 +533,8 @@ Register with email and password.
   "firstName": "string",
   "lastName": "string",
   "email": "string",
-  "country": "string",
-  "password": "string (min 8 chars)"
+  "password": "string (min 8 chars)",
+  "role": "talent | employer"
 }
 ```
 
@@ -623,7 +623,7 @@ Email/password login.
        "user": {
          "id":                 "uuid",
          "email":              "string",
-         "role":               "candidate | employer | admin",
+         "role":               "talent | employer | admin",
          "onboardingComplete": "boolean"
        }
      }
@@ -699,7 +699,7 @@ If **all three** variables are **omitted**, the app still starts. In that case, 
 `302 Found` — `Location` is `{first CORS_ORIGIN}{path}` per **Post-login Redirect Logic**:
 
 - `onboardingComplete === false` → `/onboarding/role-select`
-- `onboardingComplete === true` and `role === candidate` → `/dashboard`
+- `onboardingComplete === true` and `role === talent` → `/dashboard`
 - `onboardingComplete === true` and `role === employer` → `/discovery`
 - `onboardingComplete === true` and `role === admin` → `/admin`
 
@@ -806,11 +806,11 @@ Set a new password using a reset token.
 
 Complete role selection and profile setup. Called after email verification or first OAuth login.
 
-**Request body — candidate:**
+**Request body — talent:**
 
 ```json
 {
-  "role": "candidate",
+  "role": "talent",
   "roleTrack": "frontend | data | design | ..."
 }
 ```
@@ -854,7 +854,7 @@ Get the currently authenticated user. Cookie sent automatically.
        "firstName":          "string",
        "lastName":           "string",
        "email":              "string",
-       "role":               "candidate | employer | admin",
+       "role":               "talent | employer | admin",
        "country":            "string",
        "onboardingComplete": "boolean",
        "isVerified":         "boolean",

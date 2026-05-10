@@ -23,7 +23,7 @@ import { CompleteCandidateOnboardingDto } from './dto/complete-candidate-onboard
 @ApiTags('candidate')
 @ApiCookieAuth()
 @Controller('candidate')
-@Roles(UserRole.CANDIDATE)
+@Roles(UserRole.TALENT)
 export class CandidateController {
   constructor(private readonly candidateService: CandidateService) {}
 
