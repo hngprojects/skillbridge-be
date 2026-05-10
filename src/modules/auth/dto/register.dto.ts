@@ -5,9 +5,7 @@ import { UserRole } from '../../users/entities/user.entity';
 
 class RegisterBaseDto extends PickType(CreateUserDto, [
   'email',
-  'country',
   'password',
-  'profile_pic_url',
 ] as const) {}
 
 export class RegisterDto extends RegisterBaseDto {

@@ -147,8 +147,7 @@ export class AuthService {
       password: dto.password,
       first_name: dto.firstName,
       last_name: dto.lastName,
-      country: dto.country,
-      profile_pic_url: dto.profile_pic_url,
+      country: 'Unknown',
       role: dto.role,
     });
 

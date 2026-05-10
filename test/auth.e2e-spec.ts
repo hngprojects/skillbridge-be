@@ -52,7 +52,6 @@ type RegisterPayload = {
   firstName: string;
   lastName: string;
   email: string;
-  country: string;
   password: string;
   role: UserRole.CANDIDATE | UserRole.EMPLOYER;
 };
@@ -75,7 +74,6 @@ const registerPayload: RegisterPayload = {
   firstName: 'Jane',
   lastName: 'Doe',
   email: 'jane@example.com',
-  country: 'Nigeria',
   password: 'StrongPass123',
   role: UserRole.CANDIDATE,
 };
@@ -784,7 +782,7 @@ describe('Auth (e2e)', () => {
         first_name: registerPayload.firstName,
         last_name: registerPayload.lastName,
         fullname: `${registerPayload.firstName} ${registerPayload.lastName}`,
-        country: registerPayload.country,
+        country: 'Unknown',
         role: registerPayload.role,
         is_verified: true,
         onboardingComplete: false,
