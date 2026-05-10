@@ -9,7 +9,7 @@ import {
   clearOAuthSignupRoleCookie,
   setOAuthSignupRoleCookie,
 } from '../auth.cookies';
-import { isOAuthSignupRole } from '../oauth-signup-role';
+import { normalizeOAuthSignupRole } from '../oauth-signup-role';
 
 @Injectable()
 export class GoogleOAuthGuard extends AuthGuard('google') {
@@ -34,10 +34,11 @@ export class GoogleOAuthGuard extends AuthGuard('google') {
     }
 
     if (role !== undefined) {
-      if (!isOAuthSignupRole(role)) {
+      const normalizedRole = normalizeOAuthSignupRole(role);
+      if (!normalizedRole) {
         throw new BadRequestException('Invalid OAuth signup role');
       }
-      setOAuthSignupRoleCookie(response, role);
+      setOAuthSignupRoleCookie(response, normalizedRole);
     } else {
       clearOAuthSignupRoleCookie(response);
     }

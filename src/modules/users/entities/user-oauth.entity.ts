@@ -10,12 +10,6 @@ import {
   Unique,
 } from 'typeorm';
 
-export enum UserRole {
-  ADMIN = 'admin',
-  CANDIDATE = 'talent',
-  EMPLOYER = 'employer',
-}
-
 @Entity('user_oauth_accounts')
 @Unique(['user_id', 'provider'])
 @Unique(['provider', 'provider_id'])
