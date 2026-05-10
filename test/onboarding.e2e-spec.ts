@@ -103,6 +103,17 @@ class InMemoryUsersService {
     return user;
   }
 
+  async getUserForOnboarding(_manager: unknown, id: string): Promise<User> {
+    return this.findOne(id);
+  }
+
+  async markOnboardingCompleteWithManager(
+    _manager: unknown,
+    id: string,
+  ): Promise<void> {
+    await this.markOnboardingComplete(id);
+  }
+
   async setRefreshTokenHash(id: string, hash: string | null): Promise<void> {
     const user = await this.findOne(id);
     user.refreshTokenHash = hash;
@@ -112,6 +123,71 @@ class InMemoryUsersService {
 class InMemoryCandidateProfileRepository {
   private readonly profiles = new Map<string, CandidateProfile>();
   private nextId = 1;
+  readonly manager: {
+    transaction: <T>(
+      callback: (manager: {
+        findOne: <Entity>(
+          entity: new () => Entity,
+          options: { where: { id?: string; user_id?: string } },
+        ) => Promise<Entity | null>;
+        create: <Entity>(
+          entity: new () => Entity,
+          payload: Partial<Entity>,
+        ) => Entity;
+        save: <Entity>(
+          entity: new () => Entity,
+          payload: Entity,
+        ) => Promise<Entity>;
+        update: <Entity>(
+          entity: new () => Entity,
+          criteria: { id: string },
+          partial: Partial<Entity>,
+        ) => Promise<void>;
+      }) => Promise<T>,
+    ) => Promise<T>;
+  };
+
+  constructor(private readonly usersService: InMemoryUsersService) {
+    this.manager = {
+      transaction: async (callback) =>
+        callback({
+          findOne: async <Entity>(
+            entity: new () => Entity,
+            options: { where: { id?: string; user_id?: string } },
+          ): Promise<Entity | null> => {
+            if (entity === (User as unknown as new () => Entity)) {
+              const id = options.where.id;
+              return id
+                ? ((await this.usersService.findOneOrNull(id)) as Entity | null)
+                : null;
+            }
+            const userId = options.where.user_id;
+            return userId
+              ? ((this.profiles.get(userId) ?? null) as Entity | null)
+              : null;
+          },
+          create: <Entity>(
+            _entity: new () => Entity,
+            payload: Partial<Entity>,
+          ): Entity => Object.assign(new CandidateProfile(), payload) as Entity,
+          save: async <Entity>(
+            _entity: new () => Entity,
+            payload: Entity,
+          ): Promise<Entity> =>
+            this.save(payload as CandidateProfile) as Promise<Entity>,
+          update: async <Entity>(
+            entity: new () => Entity,
+            criteria: { id: string },
+            partial: Partial<Entity>,
+          ): Promise<void> => {
+            if (entity === (User as unknown as new () => Entity)) {
+              const user = await this.usersService.findOne(criteria.id);
+              Object.assign(user, partial);
+            }
+          },
+        }),
+    };
+  }
 
   create(payload: Partial<CandidateProfile>): CandidateProfile {
     return Object.assign(new CandidateProfile(), payload);
@@ -139,6 +215,71 @@ class InMemoryCandidateProfileRepository {
 class InMemoryEmployerProfileRepository {
   private readonly profiles = new Map<string, EmployerProfile>();
   private nextId = 1;
+  readonly manager: {
+    transaction: <T>(
+      callback: (manager: {
+        findOne: <Entity>(
+          entity: new () => Entity,
+          options: { where: { id?: string; user_id?: string } },
+        ) => Promise<Entity | null>;
+        create: <Entity>(
+          entity: new () => Entity,
+          payload: Partial<Entity>,
+        ) => Entity;
+        save: <Entity>(
+          entity: new () => Entity,
+          payload: Entity,
+        ) => Promise<Entity>;
+        update: <Entity>(
+          entity: new () => Entity,
+          criteria: { id: string },
+          partial: Partial<Entity>,
+        ) => Promise<void>;
+      }) => Promise<T>,
+    ) => Promise<T>;
+  };
+
+  constructor(private readonly usersService: InMemoryUsersService) {
+    this.manager = {
+      transaction: async (callback) =>
+        callback({
+          findOne: async <Entity>(
+            entity: new () => Entity,
+            options: { where: { id?: string; user_id?: string } },
+          ): Promise<Entity | null> => {
+            if (entity === (User as unknown as new () => Entity)) {
+              const id = options.where.id;
+              return id
+                ? ((await this.usersService.findOneOrNull(id)) as Entity | null)
+                : null;
+            }
+            const userId = options.where.user_id;
+            return userId
+              ? ((this.profiles.get(userId) ?? null) as Entity | null)
+              : null;
+          },
+          create: <Entity>(
+            _entity: new () => Entity,
+            payload: Partial<Entity>,
+          ): Entity => Object.assign(new EmployerProfile(), payload) as Entity,
+          save: async <Entity>(
+            _entity: new () => Entity,
+            payload: Entity,
+          ): Promise<Entity> =>
+            this.save(payload as EmployerProfile) as Promise<Entity>,
+          update: async <Entity>(
+            entity: new () => Entity,
+            criteria: { id: string },
+            partial: Partial<Entity>,
+          ): Promise<void> => {
+            if (entity === (User as unknown as new () => Entity)) {
+              const user = await this.usersService.findOne(criteria.id);
+              Object.assign(user, partial);
+            }
+          },
+        }),
+    };
+  }
 
   create(payload: Partial<EmployerProfile>): EmployerProfile {
     return Object.assign(new EmployerProfile(), payload);
@@ -220,11 +361,15 @@ describe('Onboarding (e2e)', () => {
         { provide: UsersService, useClass: InMemoryUsersService },
         {
           provide: getRepositoryToken(CandidateProfile),
-          useClass: InMemoryCandidateProfileRepository,
+          useFactory: (inMemoryUsersService: InMemoryUsersService) =>
+            new InMemoryCandidateProfileRepository(inMemoryUsersService),
+          inject: [UsersService],
         },
         {
           provide: getRepositoryToken(EmployerProfile),
-          useClass: InMemoryEmployerProfileRepository,
+          useFactory: (inMemoryUsersService: InMemoryUsersService) =>
+            new InMemoryEmployerProfileRepository(inMemoryUsersService),
+          inject: [UsersService],
         },
         {
           provide: VerificationOtpService,
