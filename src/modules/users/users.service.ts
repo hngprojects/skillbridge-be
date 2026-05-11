@@ -46,7 +46,7 @@ export type OAuthProviderProfileInput = {
   avatarUrl: string | null;
 };
 
-const OAUTH_DEFAULT_COUNTRY = 'Unknown';
+export const OAUTH_DEFAULT_COUNTRY = 'Unknown';
 
 @Injectable()
 export class UsersService {
@@ -65,6 +65,10 @@ export class UsersService {
     }
 
     const passwordHash = await argon2.hash(dto.password);
+    const signupReason =
+      dto.signup_reason == null || dto.signup_reason.trim() === ''
+        ? null
+        : dto.signup_reason.trim();
     return this.userModelAction.create({
       ...NO_TRANSACTION,
       createPayload: {
@@ -76,7 +80,8 @@ export class UsersService {
         avatar_url: dto.profile_pic_url ?? null,
         is_verified: false,
         onboarding_complete: false,
-        role: dto.role ?? UserRole.CANDIDATE,
+        role: dto.role ?? UserRole.TALENT,
+        signup_reason: signupReason,
       },
     });
   }

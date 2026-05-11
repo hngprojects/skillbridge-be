@@ -52,9 +52,9 @@ type RegisterPayload = {
   firstName: string;
   lastName: string;
   email: string;
-  country: string;
   password: string;
-  role: UserRole.CANDIDATE | UserRole.EMPLOYER;
+  reasonForJoining?: string;
+  role: UserRole.TALENT | UserRole.EMPLOYER;
 };
 
 type LoginPayload = {
@@ -75,9 +75,9 @@ const registerPayload: RegisterPayload = {
   firstName: 'Jane',
   lastName: 'Doe',
   email: 'jane@example.com',
-  country: 'Nigeria',
   password: 'StrongPass123',
-  role: UserRole.CANDIDATE,
+  reasonForJoining: 'Testing',
+  role: UserRole.TALENT,
 };
 
 const loginPayload: LoginPayload = {
@@ -105,7 +105,8 @@ class InMemoryUsersService {
       avatar_url: dto.profile_pic_url ?? null,
       is_verified: false,
       onboarding_complete: false,
-      role: dto.role ?? UserRole.CANDIDATE,
+      role: dto.role ?? UserRole.TALENT,
+      signup_reason: dto.signup_reason ?? null,
       refreshTokenHash: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -204,7 +205,7 @@ class InMemoryUsersService {
     avatar_url: string | null;
     provider: string;
     providerId: string;
-    role: UserRole.CANDIDATE | UserRole.EMPLOYER;
+    role: UserRole.TALENT | UserRole.EMPLOYER;
   }): Promise<User> {
     const result = await this.createOAuthUser(
       params.provider,
@@ -227,7 +228,7 @@ class InMemoryUsersService {
     email: string,
     country: 'Unknown',
     avatar_url?: string | null,
-    role: UserRole = UserRole.CANDIDATE,
+    role: UserRole = UserRole.TALENT,
   ): Promise<{ user: User; oauthUser: OAuthUser }> {
     const user = Object.assign(new User(), {
       id: `user-${this.nextId++}`,
@@ -267,7 +268,7 @@ class InMemoryUsersService {
       lastName: string;
       avatarUrl: string | null;
     },
-    signupRole?: UserRole.CANDIDATE | UserRole.EMPLOYER,
+    signupRole?: UserRole.TALENT | UserRole.EMPLOYER,
   ): Promise<User> {
     // Check if OAuth account already exists
     const linked = await this.findOauthAccountWithUser(
@@ -396,6 +397,7 @@ class MockMailService {
     to: string;
     otp: string;
     expiresAt: Date;
+    recipientFirstName: string;
   }> = [];
 
   readonly passwordResetMessages: Array<{
@@ -409,6 +411,7 @@ class MockMailService {
     to: string;
     otp: string;
     expiresAt: Date;
+    recipientFirstName: string;
   }) {
     this.verificationMessages.push(params);
     return { id: `mail-${this.verificationMessages.length}` };
@@ -589,8 +592,27 @@ describe('Auth (e2e)', () => {
     const createdUser = await usersService.findByEmail(registerPayload.email);
     expect(createdUser?.is_verified).toBe(false);
     expect(createdUser?.role).toBe(registerPayload.role);
+    expect(createdUser?.signup_reason).toBe(registerPayload.reasonForJoining);
     expect(mailService.verificationMessages).toHaveLength(1);
     expect(mailService.verificationMessages[0]?.to).toBe(registerPayload.email);
+  });
+
+  it('POST /auth/register accepts omitting reasonForJoining', async () => {
+    const payload = {
+      firstName: 'Alex',
+      lastName: 'Rivers',
+      email: 'alex-no-reason@example.com',
+      password: 'StrongPass123',
+      role: UserRole.TALENT,
+    };
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(payload)
+      .expect(201);
+
+    const createdUser = await usersService.findByEmail(payload.email);
+    expect(createdUser?.signup_reason).toBeNull();
   });
 
   it('POST /auth/forgot-password returns same 200 payload for unknown email and does not send mail', async () => {
@@ -784,7 +806,7 @@ describe('Auth (e2e)', () => {
         first_name: registerPayload.firstName,
         last_name: registerPayload.lastName,
         fullname: `${registerPayload.firstName} ${registerPayload.lastName}`,
-        country: registerPayload.country,
+        country: 'Unknown',
         role: registerPayload.role,
         is_verified: true,
         onboardingComplete: false,

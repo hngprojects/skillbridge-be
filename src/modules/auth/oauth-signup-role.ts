@@ -1,14 +1,20 @@
 import { UserRole } from '../users/entities/user.entity';
 
-export type OAuthSignupRole = UserRole.CANDIDATE | UserRole.EMPLOYER;
+export type OAuthSignupRole = UserRole.TALENT | UserRole.EMPLOYER;
 
-export const OAUTH_SIGNUP_ROLES = [
-  UserRole.CANDIDATE,
-  UserRole.EMPLOYER,
-] as const;
+export const OAUTH_SIGNUP_ROLES = [UserRole.TALENT, UserRole.EMPLOYER] as const;
+
+export function normalizeOAuthSignupRole(
+  value: string | undefined,
+): OAuthSignupRole | undefined {
+  if (value === UserRole.TALENT || value === UserRole.EMPLOYER) {
+    return value;
+  }
+  return undefined;
+}
 
 export function isOAuthSignupRole(
   value: string | undefined,
 ): value is OAuthSignupRole {
-  return value === UserRole.CANDIDATE || value === UserRole.EMPLOYER;
+  return normalizeOAuthSignupRole(value) !== undefined;
 }

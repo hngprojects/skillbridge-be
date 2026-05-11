@@ -15,3 +15,5 @@ process.env.GOOGLE_CLIENT_ID = 'test-google-client-id';
 process.env.GOOGLE_CLIENT_SECRET = 'test-google-client-secret';
 process.env.GOOGLE_CALLBACK_URL = 'http://localhost:3000/auth/google/callback';
 process.env.FRONTEND_URL = 'http://localhost:5173';
+/** Isolated from developer `.env` (e.g. AUTH_COOKIE_SAMESITE=none for prod). */
+process.env.AUTH_COOKIE_SAMESITE = 'strict';
