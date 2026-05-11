@@ -499,11 +499,11 @@ describe('Onboarding (e2e)', () => {
       .post('/employer/onboarding')
       .set('Cookie', cookieHeader)
       .send({
-        companyName: 'Acme Labs',
-        companySize: '11-50',
-        industry: 'Technology',
-        websiteUrl: 'https://acmelabs.example',
-        hiringRegion: 'Remote, Africa',
+        joiningAs: 'recruiter',
+        desiredRoles: ['frontend_developer', 'backend_developer'],
+        region: 'Africa',
+        hiringCountRange: '6_10',
+        companyWebsite: 'https://acmelabs.example',
       })
       .expect(200);
 
@@ -516,11 +516,11 @@ describe('Onboarding (e2e)', () => {
       },
       profile: {
         user_id: user.id,
-        company_name: 'Acme Labs',
-        company_size: '11-50',
-        industry: 'Technology',
-        website_url: 'https://acmelabs.example',
-        hiring_region: 'Remote, Africa',
+        joining_as: 'recruiter',
+        desired_roles: ['frontend_developer', 'backend_developer'],
+        region: 'Africa',
+        hiring_count_range: '6_10',
+        company_website: 'https://acmelabs.example',
       },
     });
   });
