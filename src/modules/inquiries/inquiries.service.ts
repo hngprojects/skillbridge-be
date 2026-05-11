@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateContactMessageDto } from './dto/create-contact-message.dto';
@@ -15,14 +15,14 @@ export class InquiriesService {
     private readonly contactMessageRepository: Repository<ContactMessage>,
   ) {}
 
-  async joinWaitlist(dto: JoinWaitlistDto): Promise<{ message: string }> {
+  async joinWaitlist(dto: JoinWaitlistDto): Promise<{ success: boolean; message: string }> {
     const normalizedEmail = dto.email.trim().toLowerCase();
     const existingEntry = await this.waitlistRepository.findOne({
       where: { email: normalizedEmail },
     });
 
     if (existingEntry) {
-      return { message: 'Email already on waitlist' };
+      throw new ConflictException('Email already on waitlist');
     }
 
     await this.waitlistRepository.save(
@@ -35,12 +35,12 @@ export class InquiriesService {
       }),
     );
 
-    return { message: 'Added to waitlist' };
+    return { success: true, message: 'Added to waitlist' };
   }
 
   async createContactMessage(
     dto: CreateContactMessageDto,
-  ): Promise<{ message: string }> {
+  ): Promise<{ success: boolean; message: string }> {
     await this.contactMessageRepository.save(
       this.contactMessageRepository.create({
         fullName: dto.fullName.trim(),
@@ -50,6 +50,6 @@ export class InquiriesService {
       }),
     );
 
-    return { message: 'Message received' };
+    return { success: true, message: 'Message received' };
   }
 }
