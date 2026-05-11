@@ -33,11 +33,11 @@ Auth is a Week 1 deliverable and the foundation every other SkillBridge service 
 
 SkillBridge has three distinct roles, each with a different access surface:
 
-| Role        | Access                                                   |
-| ----------- | -------------------------------------------------------- |
-| `talent`    | Assessment pipeline, dashboard, verified profile         |
-| `employer`  | Discovery dashboard, candidate profiles (Job Ready only) |
-| `admin`     | Moderation queue, submission review, scoring oversight   |
+| Role       | Access                                                   |
+| ---------- | -------------------------------------------------------- |
+| `talent`   | Assessment pipeline, dashboard, verified profile         |
+| `employer` | Discovery dashboard, candidate profiles (Job Ready only) |
+| `admin`    | Moderation queue, submission review, scoring oversight   |
 
 > Admin accounts are **not self-registerable**. They are provisioned directly in the database or via an internal endpoint.
 
@@ -246,15 +246,15 @@ There are two distinct auth paths from the first touchpoint: candidate and emplo
 
 ### At a glance
 
-|                       | Flow A — Email / Password                              | Flow B — OAuth (Google / LinkedIn)                 |
-| --------------------- | ------------------------------------------------------ | -------------------------------------------------- |
-| Entry point           | Registration form                                      | "Continue with Google/LinkedIn" button             |
-| Fields collected      | firstName, lastName, email, password, role             | Pulled from provider profile                       |
-| Email verification    | Manual — 15-minute OTP sent to inbox                  | Automatic — provider pre-verifies                  |
-| Password              | Required (Argon hashed, cost 12)                       | Never set (`NULL`)                                 |
-| Account conflict      | N/A                                                    | Auto-link if email already exists                  |
-| After signup          | Must verify email → then onboarding                   | Straight to onboarding                             |
-| Onboarding required   | Yes (all new users)                                    | Yes (all new users)                                |
+|                     | Flow A — Email / Password                  | Flow B — OAuth (Google / LinkedIn)     |
+| ------------------- | ------------------------------------------ | -------------------------------------- |
+| Entry point         | Registration form                          | "Continue with Google/LinkedIn" button |
+| Fields collected    | firstName, lastName, email, password, role | Pulled from provider profile           |
+| Email verification  | Manual — 15-minute OTP sent to inbox       | Automatic — provider pre-verifies      |
+| Password            | Required (Argon hashed, cost 12)           | Never set (`NULL`)                     |
+| Account conflict    | N/A                                        | Auto-link if email already exists      |
+| After signup        | Must verify email → then onboarding        | Straight to onboarding                 |
+| Onboarding required | Yes (all new users)                        | Yes (all new users)                    |
 
 **Both paths issue the same JWT and set the same httpOnly refresh token cookie. Post-onboarding behaviour is identical regardless of how the user signed up.**
 

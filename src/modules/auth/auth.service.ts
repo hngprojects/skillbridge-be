@@ -27,10 +27,7 @@ import {
 } from '../../config/env';
 import { MailService } from '../mail/mail.service';
 import { User, UserRole } from '../users/entities/user.entity';
-import {
-  OAUTH_DEFAULT_COUNTRY,
-  UsersService,
-} from '../users/users.service';
+import { OAUTH_DEFAULT_COUNTRY, UsersService } from '../users/users.service';
 import {
   clearOAuthSignupRoleCookie,
   clearLinkedInOAuthStateCookie,
