@@ -1,10 +1,15 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateContactMessageDto } from './dto/create-contact-message.dto';
 import { JoinWaitlistDto } from './dto/join-waitlist.dto';
 import { ContactMessage } from './entities/contact-message.entity';
 import { WaitlistEntry } from './entities/waitlist-entry.entity';
+import {
+  ConflictError,
+  ErrorMessages,
+  SuccessMessages,
+} from '../../shared';
 
 @Injectable()
 export class InquiriesService {
@@ -24,7 +29,7 @@ export class InquiriesService {
     });
 
     if (existingEntry) {
-      throw new ConflictException('Email already on waitlist');
+      throw new ConflictError(ErrorMessages.INQUIRIES.EMAIL_ALREADY_ON_WAITLIST);
     }
 
     await this.waitlistRepository.save(
@@ -37,7 +42,7 @@ export class InquiriesService {
       }),
     );
 
-    return { success: true, message: 'Added to waitlist' };
+    return { success: true, message: SuccessMessages.INQUIRIES.WAITLIST_JOINED };
   }
 
   async createContactMessage(
@@ -52,6 +57,6 @@ export class InquiriesService {
       }),
     );
 
-    return { success: true, message: 'Message received' };
+    return { success: true, message: SuccessMessages.INQUIRIES.MESSAGE_RECEIVED };
   }
 }

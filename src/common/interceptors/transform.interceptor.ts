@@ -5,6 +5,7 @@ import {
   NestInterceptor,
 } from '@nestjs/common';
 import { map, Observable } from 'rxjs';
+import { SuccessMessages } from '../../shared';
 
 type MessagePayload = {
   message: string;
@@ -39,7 +40,7 @@ export class TransformInterceptor<T> implements NestInterceptor<
         const statusCode = response.statusCode;
         const baseResponse = {
           status_code: statusCode,
-          message: 'success',
+          message: SuccessMessages.COMMON.SUCCESS,
         };
 
         if (
