@@ -85,17 +85,4 @@ export const env = createEnv({
   emptyStringAsUndefined: true,
 });
 
-linkedInOAuthEnvTrioSchema.parse({
-  LINKEDIN_CLIENT_ID: env.LINKEDIN_CLIENT_ID,
-  LINKEDIN_CLIENT_SECRET: env.LINKEDIN_CLIENT_SECRET,
-  LINKEDIN_REDIRECT_URI: env.LINKEDIN_REDIRECT_URI,
-});
-
-/**
- * ESLint safe
- */
-export const linkedInHttpTimeoutMs: number = env.LINKEDIN_HTTP_TIMEOUT_MS;
-export const linkedInHttpMaxBodyBytes: number =
-  env.LINKEDIN_HTTP_MAX_BODY_BYTES;
-
 export type Env = typeof env;
