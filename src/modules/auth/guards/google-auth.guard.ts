@@ -19,6 +19,22 @@ export class GoogleOAuthGuard extends AuthGuard('google') {
     });
   }
 
+  handleRequest<TUser = unknown>(
+    err: Error | undefined,
+    user: TUser | false,
+    _info: unknown,
+    _context: ExecutionContext,
+    _status?: unknown,
+  ): TUser {
+    if (err) {
+      throw err;
+    }
+    if (!user) {
+      throw new BadRequestException('Google authentication failed');
+    }
+    return user;
+  }
+
   canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<
       Request & {

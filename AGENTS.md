@@ -9,7 +9,7 @@
 
 - This repository is the backend for SkillBridge.
 - Current stack: NestJS, TypeORM, PostgreSQL, JWT auth, Swagger, Resend.
-- Product direction extends beyond current code into candidate, employer, assessment, scoring, AI guidance, and notification domains.
+- Product direction extends beyond current code into talent, employer, assessment, scoring, AI guidance, and notification domains.
 
 ## Caveman
 
@@ -46,7 +46,7 @@
 
 - Read `docs/auth-module-specification.md` before changing auth flows, roles, cookies, onboarding-related auth fields, or session contracts.
 - Read `docs/database-schema.dbml` before changing tables, enums, relations, or introducing new persistence models.
-- Read `docs/candidate-domain-specification.md` before changing candidate onboarding, candidate profile shape, readiness state, publishability, or candidate-facing endpoints.
+- Read `docs/talent-domain-specification.md` before changing talent onboarding, talent profile shape, readiness state, publishability, or talent-facing endpoints.
 - Read `docs/employer-domain-specification.md` before changing employer onboarding, employer profile shape, shortlist flows, contact flows, or employer-facing endpoints.
 - If code and docs disagree, call out the mismatch clearly and propose which source should become canonical.
 

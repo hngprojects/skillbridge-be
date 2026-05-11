@@ -77,6 +77,7 @@ export class UsersService {
         is_verified: false,
         onboarding_complete: false,
         role: dto.role ?? UserRole.TALENT,
+        signup_reason: dto.signup_reason ?? null,
       },
     });
   }
