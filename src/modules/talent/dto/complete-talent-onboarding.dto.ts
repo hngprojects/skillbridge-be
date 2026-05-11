@@ -7,7 +7,7 @@ import {
   MinLength,
 } from 'class-validator';
 
-export class CompleteCandidateOnboardingDto {
+export class CompleteTalentOnboardingDto {
   @ApiProperty({ example: 'frontend' })
   @IsString()
   @MinLength(2)
