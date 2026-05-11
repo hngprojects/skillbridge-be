@@ -27,7 +27,10 @@ import {
 } from '../../config/env';
 import { MailService } from '../mail/mail.service';
 import { User, UserRole } from '../users/entities/user.entity';
-import { UsersService } from '../users/users.service';
+import {
+  OAUTH_DEFAULT_COUNTRY,
+  UsersService,
+} from '../users/users.service';
 import {
   clearOAuthSignupRoleCookie,
   clearLinkedInOAuthStateCookie,
@@ -60,7 +63,10 @@ import {
 } from './linkedin-oauth.service';
 import { PasswordResetQueueService } from './password-reset-queue.service';
 import { GoogleProfile } from './strategies/google.strategy';
-import { isOAuthSignupRole, type OAuthSignupRole } from './oauth-signup-role';
+import {
+  normalizeOAuthSignupRole,
+  type OAuthSignupRole,
+} from './oauth-signup-role';
 import { OAuthSignupRoleRequiredException } from './exceptions/oauth-signup-role-required.exception';
 
 export interface AuthUser {
@@ -147,8 +153,7 @@ export class AuthService {
       password: dto.password,
       first_name: dto.firstName,
       last_name: dto.lastName,
-      country: dto.country,
-      profile_pic_url: dto.profile_pic_url,
+      country: OAUTH_DEFAULT_COUNTRY,
       role: dto.role,
     });
 
@@ -470,9 +475,7 @@ export class AuthService {
   ): Promise<void> {
     const frontend = this.getFrontendOrigin();
     const signupRoleCookie = readCookie(request, OAUTH_SIGNUP_ROLE_COOKIE);
-    const signupRole = isOAuthSignupRole(signupRoleCookie)
-      ? signupRoleCookie
-      : undefined;
+    const signupRole = normalizeOAuthSignupRole(signupRoleCookie);
 
     const redirectWithError = (key: string): void => {
       clearLinkedInOAuthStateCookie(response);
@@ -572,7 +575,7 @@ export class AuthService {
   private getPostLoginRedirectPath(user: AuthUser): string {
     if (!user.onboardingComplete) {
       switch (user.role) {
-        case UserRole.CANDIDATE:
+        case UserRole.TALENT:
           return '/candidate/onboarding';
         case UserRole.EMPLOYER:
           return '/employer/onboarding';
@@ -582,7 +585,7 @@ export class AuthService {
     }
 
     switch (user.role) {
-      case UserRole.CANDIDATE:
+      case UserRole.TALENT:
         return '/dashboard';
       case UserRole.EMPLOYER:
         return '/discovery';

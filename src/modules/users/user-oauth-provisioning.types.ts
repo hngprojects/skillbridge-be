@@ -10,7 +10,7 @@ export type CreateVerifiedUserWithOauthLinkParams = {
   avatar_url: string | null;
   provider: string;
   providerId: string;
-  role: UserRole.CANDIDATE | UserRole.EMPLOYER;
+  role: UserRole.TALENT | UserRole.EMPLOYER;
 };
 
 /**
