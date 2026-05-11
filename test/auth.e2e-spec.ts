@@ -24,10 +24,8 @@ import {
   OAUTH_SIGNUP_ROLE_COOKIE,
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
-import {
-  AuthService,
-  FORGOT_PASSWORD_SUCCESS_MESSAGE,
-} from '../src/modules/auth/auth.service';
+import { AuthService } from '../src/modules/auth/auth.service';
+import { SuccessMessages } from '../src/shared';
 import { PasswordResetOtp } from '../src/modules/auth/entities/password-reset-otp.entity';
 import { PasswordResetOtpService } from '../src/modules/auth/password-reset-otp.service';
 import { PasswordResetDeliveryService } from '../src/modules/auth/password-reset-delivery.service';
@@ -582,7 +580,7 @@ describe('Auth (e2e)', () => {
 
     expect(response.body).toMatchObject({
       status: 'success',
-      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+      message: SuccessMessages.AUTH.FORGOT_PASSWORD,
     });
     expect(mailService.passwordResetMessages).toHaveLength(0);
     expect(mockPasswordResetOtpService.issue).not.toHaveBeenCalled();
@@ -603,7 +601,7 @@ describe('Auth (e2e)', () => {
 
     expect(response.body).toMatchObject({
       status: 'success',
-      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+      message: SuccessMessages.AUTH.FORGOT_PASSWORD,
     });
     expect(mockPasswordResetOtpService.issue).toHaveBeenCalled();
     expect(mailService.passwordResetMessages).toHaveLength(1);

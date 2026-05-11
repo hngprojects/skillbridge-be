@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { Request } from 'express';
@@ -7,6 +7,7 @@ import { env } from '../../../config/env';
 import { UsersService } from '../../users/users.service';
 import { ACCESS_TOKEN_COOKIE, readCookie } from '../auth.cookies';
 import { UserRole } from '../../users/entities/user.entity';
+import { ErrorMessages, UnauthorizedError } from '../../../shared';
 
 export interface JwtPayload {
   sub: string;
@@ -33,7 +34,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
     const user = await this.usersService.findOneOrNull(payload.sub);
-    if (!user) throw new UnauthorizedException('Invalid access token');
+    if (!user) {
+      throw new UnauthorizedError(ErrorMessages.AUTH.INVALID_ACCESS_TOKEN);
+    }
     return {
       sub: user.id,
       email: user.email,

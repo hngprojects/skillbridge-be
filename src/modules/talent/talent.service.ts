@@ -1,9 +1,4 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthResult, AuthService } from '../auth/auth.service';
@@ -13,6 +8,12 @@ import {
   TalentProfile,
   TalentProfileStatus,
 } from './entities/talent-profile.entity';
+import {
+  ConflictError,
+  ErrorMessages,
+  ForbiddenError,
+  SuccessMessages,
+} from '../../shared';
 
 export type TalentOnboardingResult = {
   message: string;
@@ -41,19 +42,19 @@ export class TalentService {
           user = await this.usersService.getUserForOnboarding(manager, userId);
         } catch (error: unknown) {
           if (error instanceof NotFoundException) {
-            throw new ForbiddenException('Invalid user');
+            throw new ForbiddenError(ErrorMessages.ONBOARDING.INVALID_USER);
           }
           throw error;
         }
         if (user.onboarding_complete) {
-          throw new ForbiddenException('Onboarding already completed');
+          throw new ForbiddenError(ErrorMessages.ONBOARDING.ALREADY_COMPLETED);
         }
 
         const existingProfile = await manager.findOne(TalentProfile, {
           where: { user_id: userId },
         });
         if (existingProfile) {
-          throw new ConflictException('Talent profile already exists');
+          throw new ConflictError(ErrorMessages.ONBOARDING.TALENT_PROFILE_EXISTS);
         }
 
         const nextProfile = manager.create(TalentProfile, {
@@ -78,7 +79,7 @@ export class TalentService {
 
     const session = await this.authService.issueSessionForUser(
       userId,
-      'Talent onboarding completed',
+      SuccessMessages.ONBOARDING.TALENT_COMPLETED,
     );
 
     return {

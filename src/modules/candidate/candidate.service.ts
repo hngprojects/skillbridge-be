@@ -1,9 +1,4 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthResult, AuthService } from '../auth/auth.service';
@@ -13,6 +8,12 @@ import {
   CandidateProfile,
   CandidateProfileStatus,
 } from './entities/candidate-profile.entity';
+import {
+  ConflictError,
+  ErrorMessages,
+  ForbiddenError,
+  SuccessMessages,
+} from '../../shared';
 
 export type CandidateOnboardingResult = {
   message: string;
@@ -41,19 +42,21 @@ export class CandidateService {
           user = await this.usersService.getUserForOnboarding(manager, userId);
         } catch (error: unknown) {
           if (error instanceof NotFoundException) {
-            throw new ForbiddenException('Invalid user');
+            throw new ForbiddenError(ErrorMessages.ONBOARDING.INVALID_USER);
           }
           throw error;
         }
         if (user.onboarding_complete) {
-          throw new ForbiddenException('Onboarding already completed');
+          throw new ForbiddenError(ErrorMessages.ONBOARDING.ALREADY_COMPLETED);
         }
 
         const existingProfile = await manager.findOne(CandidateProfile, {
           where: { user_id: userId },
         });
         if (existingProfile) {
-          throw new ConflictException('Candidate profile already exists');
+          throw new ConflictError(
+            ErrorMessages.ONBOARDING.CANDIDATE_PROFILE_EXISTS,
+          );
         }
 
         const nextProfile = manager.create(CandidateProfile, {
@@ -78,7 +81,7 @@ export class CandidateService {
 
     const session = await this.authService.issueSessionForUser(
       userId,
-      'Candidate onboarding completed',
+      SuccessMessages.ONBOARDING.CANDIDATE_COMPLETED,
     );
 
     return {

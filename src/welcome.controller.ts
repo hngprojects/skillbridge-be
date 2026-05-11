@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from './common/decorators/public.decorator';
+import { SuccessMessages } from './shared';
 
 @ApiTags('welcome')
 @Controller()
@@ -11,7 +12,7 @@ export class WelcomeController {
   welcome() {
     return {
       status_code: 200,
-      message: 'I am the NestJs api responding',
+      message: SuccessMessages.COMMON.API_PROBE,
     };
   }
 }

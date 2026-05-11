@@ -1,9 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import type {
   CreateVerifiedUserWithOauthLinkParams,
@@ -23,6 +18,12 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { User, UserRole } from './entities/user.entity';
 import { OAuthUserModelAction } from './actions/user-oauth.action';
 import { OAuthUser } from './entities/user-oauth.entity';
+import {
+  ConflictError,
+  ErrorMessages,
+  InternalServerError,
+  NotFoundError,
+} from '../../shared';
 import type { OAuthSignupRole } from '../auth/oauth-signup-role';
 import { OAuthSignupRoleRequiredException } from '../auth/exceptions/oauth-signup-role-required.exception';
 
@@ -61,7 +62,7 @@ export class UsersService {
   async create(dto: CreateUserDto): Promise<User> {
     const existing = await this.userModelAction.findByEmail(dto.email);
     if (existing) {
-      throw new ConflictException('Email already registered');
+      throw new ConflictError(ErrorMessages.USER.EMAIL_ALREADY_REGISTERED);
     }
 
     const passwordHash = await argon2.hash(dto.password);
@@ -97,7 +98,7 @@ export class UsersService {
     const user = await this.userModelAction.get({
       identifierOptions: { id },
     });
-    if (!user) throw new NotFoundException(`User ${id} not found`);
+    if (!user) throw new NotFoundError(ErrorMessages.USER.NOT_FOUND(id));
     return user;
   }
 
@@ -129,7 +130,7 @@ export class UsersService {
       updatePayload: payload,
     });
     if (!updated) {
-      throw new InternalServerErrorException('Failed to update user');
+      throw new InternalServerError(ErrorMessages.USER.UPDATE_FAILED);
     }
     return updated;
   }
@@ -184,7 +185,7 @@ export class UsersService {
       where: { id },
     });
     if (!user) {
-      throw new NotFoundException(`User ${id} not found`);
+      throw new NotFoundError(ErrorMessages.USER.NOT_FOUND(id));
     }
     return user;
   }

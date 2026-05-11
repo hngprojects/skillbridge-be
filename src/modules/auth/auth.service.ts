@@ -1,11 +1,9 @@
 import {
-  BadRequestException,
   ForbiddenException,
   HttpException,
   HttpStatus,
   Injectable,
   Logger,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
@@ -28,6 +26,12 @@ import { PasswordResetOtpService } from './password-reset-otp.service';
 import { PasswordResetQueueService } from './password-reset-queue.service';
 import { GoogleProfile } from './strategies/google.strategy';
 import { type OAuthSignupRole } from './oauth-signup-role';
+import {
+  BadRequestError,
+  ErrorMessages,
+  SuccessMessages,
+  UnauthorizedError,
+} from '../../shared';
 
 export interface AuthUser {
   id: string;
@@ -71,9 +75,6 @@ export interface VerifyEmailResult {
   user: AuthUser;
   tokens: AuthTokens;
 }
-
-export const FORGOT_PASSWORD_SUCCESS_MESSAGE =
-  'If that email exists, a reset code has been sent';
 
 export interface ForgotPasswordResponse {
   status: 'success';
@@ -129,14 +130,14 @@ export class AuthService {
     });
 
     return {
-      message: 'Verification otp sent',
+      message: SuccessMessages.AUTH.VERIFICATION_OTP_SENT,
     };
   }
 
   async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResult> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
-      throw new BadRequestException('Invalid or expired otp');
+      throw new BadRequestError(ErrorMessages.AUTH.INVALID_OR_EXPIRED_OTP);
     }
 
     const isValidOtp = await this.verificationOtpService.consume(
@@ -144,7 +145,7 @@ export class AuthService {
       dto.otp,
     );
     if (!isValidOtp) {
-      throw new BadRequestException('Invalid or expired otp');
+      throw new BadRequestError(ErrorMessages.AUTH.INVALID_OR_EXPIRED_OTP);
     }
 
     const verifiedUser: User = user.is_verified
@@ -154,7 +155,7 @@ export class AuthService {
     await this.persistRefreshToken(verifiedUser.id, tokens.refreshToken);
 
     return {
-      message: 'Email verified',
+      message: SuccessMessages.AUTH.EMAIL_VERIFIED,
       user: this.toAuthUser(verifiedUser),
       tokens,
     };
@@ -165,10 +166,10 @@ export class AuthService {
   ): Promise<{ message: string }> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
-      throw new BadRequestException('Account not found');
+      throw new BadRequestError(ErrorMessages.AUTH.ACCOUNT_NOT_FOUND);
     }
     if (user.is_verified) {
-      throw new BadRequestException('Account is already verified');
+      throw new BadRequestError(ErrorMessages.AUTH.ACCOUNT_ALREADY_VERIFIED);
     }
 
     const resendCount = await this.verificationOtpService.countRecentResends(
@@ -177,7 +178,7 @@ export class AuthService {
     );
     if (resendCount >= env.VERIFICATION_RESEND_LIMIT_PER_HOUR) {
       throw new HttpException(
-        'Too many requests. Please wait before trying again.',
+        ErrorMessages.AUTH.TOO_MANY_REQUESTS,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
@@ -194,27 +195,32 @@ export class AuthService {
     });
 
     return {
-      message: 'Verification email resent',
+      message: SuccessMessages.AUTH.VERIFICATION_EMAIL_RESENT,
     };
   }
 
   async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.usersService.findByEmail(dto.email);
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user)
+      throw new UnauthorizedError(ErrorMessages.AUTH.INVALID_CREDENTIALS);
 
     if (!user.is_verified) {
       throw new ForbiddenException({
         error: 'EMAIL_NOT_VERIFIED',
-        message: 'Please verify your email to continue',
+        message: ErrorMessages.AUTH.EMAIL_NOT_VERIFIED,
         email: user.email,
       });
     }
 
-    if (!user.password) throw new UnauthorizedException('Invalid credentials');
+    if (!user.password) {
+      throw new UnauthorizedError(ErrorMessages.AUTH.INVALID_CREDENTIALS);
+    }
     const valid = await argon2.verify(user.password, dto.password);
-    if (!valid) throw new UnauthorizedException('Invalid credentials');
+    if (!valid) {
+      throw new UnauthorizedError(ErrorMessages.AUTH.INVALID_CREDENTIALS);
+    }
 
-    return this.issueTokens(user, 'Login successful');
+    return this.issueTokens(user, SuccessMessages.AUTH.LOGIN);
   }
 
   async forgotPassword(
@@ -229,19 +235,19 @@ export class AuthService {
 
     return {
       status: 'success',
-      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+      message: SuccessMessages.AUTH.FORGOT_PASSWORD,
     };
   }
 
   async resetPassword(dto: ResetPasswordDto): Promise<ResetPasswordResponse> {
     const user = await this.usersService.findByEmail(dto.email.trim());
     if (!user) {
-      throw new BadRequestException('Invalid or expired OTP');
+      throw new BadRequestError(ErrorMessages.AUTH.INVALID_OR_EXPIRED_OTP);
     }
 
     const valid = await this.passwordResetOtpService.consume(user.id, dto.otp);
     if (!valid) {
-      throw new BadRequestException('Invalid or expired OTP');
+      throw new BadRequestError(ErrorMessages.AUTH.INVALID_OR_EXPIRED_OTP);
     }
 
     const passwordHash = await argon2.hash(dto.password);
@@ -249,7 +255,7 @@ export class AuthService {
 
     return {
       status: 'success',
-      message: 'Password updated. Please log in.',
+      message: SuccessMessages.AUTH.PASSWORD_UPDATED,
     };
   }
 
@@ -272,7 +278,9 @@ export class AuthService {
   async refresh(
     refreshToken: string | undefined,
   ): Promise<{ message: string; tokens: AuthTokens }> {
-    if (!refreshToken) throw new UnauthorizedException('Invalid refresh token');
+    if (!refreshToken) {
+      throw new UnauthorizedError(ErrorMessages.AUTH.INVALID_REFRESH_TOKEN);
+    }
 
     let payload: JwtPayload;
     try {
@@ -280,16 +288,18 @@ export class AuthService {
         secret: env.JWT_REFRESH_SECRET,
       });
     } catch {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new UnauthorizedError(ErrorMessages.AUTH.INVALID_REFRESH_TOKEN);
     }
 
     const user = await this.usersService.findOneOrNull(payload.sub);
     if (!user?.refreshTokenHash) {
-      throw new UnauthorizedException('Refresh token has been revoked');
+      throw new UnauthorizedError(ErrorMessages.AUTH.REFRESH_TOKEN_REVOKED);
     }
 
     const matches = await argon2.verify(user.refreshTokenHash, refreshToken);
-    if (!matches) throw new UnauthorizedException('Invalid refresh token');
+    if (!matches) {
+      throw new UnauthorizedError(ErrorMessages.AUTH.INVALID_REFRESH_TOKEN);
+    }
 
     const tokens = await this.signTokens(user);
     const nextHash = await argon2.hash(tokens.refreshToken);
@@ -298,10 +308,12 @@ export class AuthService {
       user.refreshTokenHash,
       nextHash,
     );
-    if (!rotated) throw new UnauthorizedException('Invalid refresh token');
+    if (!rotated) {
+      throw new UnauthorizedError(ErrorMessages.AUTH.INVALID_REFRESH_TOKEN);
+    }
 
     return {
-      message: 'Token refreshed successfully',
+      message: SuccessMessages.AUTH.TOKEN_REFRESHED,
       tokens,
     };
   }
@@ -365,7 +377,7 @@ export class AuthService {
       profile,
       signupRole,
     );
-    return this.issueTokens(user, 'Login successful');
+    return this.issueTokens(user, SuccessMessages.AUTH.LOGIN);
   }
 
   getFrontendOrigin(): string {
