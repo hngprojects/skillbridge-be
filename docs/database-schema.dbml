@@ -6,7 +6,7 @@ Table users {
   last_name varchar(255) [not null]
   avatar_url varchar(500)
   country varchar(100) [not null]
-  role user_role [not null, default: 'candidate', note: 'candidate | employer | admin']
+  role user_role [not null, default: 'talent', note: 'talent | employer | admin']
   refresh_token_hash varchar(500)
   is_verified boolean [not null, default: false]
   onboarding_complete boolean [not null, default: false]

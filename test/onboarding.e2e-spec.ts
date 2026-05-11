@@ -38,7 +38,7 @@ import { MailService } from '../src/modules/mail/mail.service';
 import { User, UserRole } from '../src/modules/users/entities/user.entity';
 import { UsersService } from '../src/modules/users/users.service';
 
-type CandidateUser = User & { role: UserRole.CANDIDATE };
+type CandidateUser = User & { role: UserRole.TALENT };
 type EmployerUser = User & { role: UserRole.EMPLOYER };
 
 class InMemoryUsersService {
@@ -51,7 +51,7 @@ class InMemoryUsersService {
       first_name: 'Casey',
       last_name: 'Candidate',
       country: 'Nigeria',
-      role: UserRole.CANDIDATE,
+      role: UserRole.TALENT,
     });
     this.seedUser({
       id: 'employer-user',
@@ -444,7 +444,7 @@ describe('Onboarding (e2e)', () => {
       status_code: 200,
       message: 'Candidate onboarding completed',
       user: {
-        role: UserRole.CANDIDATE,
+        role: UserRole.TALENT,
         onboardingComplete: true,
       },
       profile: {

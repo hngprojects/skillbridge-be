@@ -134,7 +134,7 @@ Likely future endpoints:
 - Only users with role `employer` can access employer endpoints.
 - Employer profile should be created once, either:
   - immediately after employer signup, or
-  - during onboarding after role selection
+  - during employer-specific onboarding
 - Employers can only discover candidates whose profiles are published and meet visibility rules.
 - Employers can shortlist a candidate only once.
 - Employers should not contact candidates who are not published or whose contact state is blocked by policy.

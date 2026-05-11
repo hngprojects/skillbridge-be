@@ -46,7 +46,7 @@ export type OAuthProviderProfileInput = {
   avatarUrl: string | null;
 };
 
-const OAUTH_DEFAULT_COUNTRY = 'Unknown';
+export const OAUTH_DEFAULT_COUNTRY = 'Unknown';
 
 @Injectable()
 export class UsersService {
@@ -76,7 +76,7 @@ export class UsersService {
         avatar_url: dto.profile_pic_url ?? null,
         is_verified: false,
         onboarding_complete: false,
-        role: dto.role ?? UserRole.CANDIDATE,
+        role: dto.role ?? UserRole.TALENT,
       },
     });
   }

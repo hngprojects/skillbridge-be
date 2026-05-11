@@ -19,7 +19,7 @@ export type CreateUserWithOauthLinkUserPayload = {
 export type CreateUserWithOauthLinkOAuthPayload = {
   provider: string;
   providerId: string;
-  role: UserRole.CANDIDATE | UserRole.EMPLOYER;
+  role: UserRole.TALENT | UserRole.EMPLOYER;
 };
 
 @Injectable()
