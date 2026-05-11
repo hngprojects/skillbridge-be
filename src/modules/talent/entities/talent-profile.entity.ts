@@ -11,7 +11,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
-export enum CandidateProfileStatus {
+export enum TalentProfileStatus {
   NOT_STARTED = 'not_started',
   IN_PROGRESS = 'in_progress',
   NOT_READY = 'not_ready',
@@ -19,8 +19,8 @@ export enum CandidateProfileStatus {
   JOB_READY = 'job_ready',
 }
 
-@Entity('candidate_profiles')
-export class CandidateProfile {
+@Entity('talent_profiles')
+export class TalentProfile {
   @ApiProperty({ format: 'uuid' })
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -38,13 +38,13 @@ export class CandidateProfile {
   @Column({ type: 'varchar', length: 50 })
   role_track: string;
 
-  @ApiProperty({ enum: CandidateProfileStatus })
+  @ApiProperty({ enum: TalentProfileStatus })
   @Column({
     type: 'enum',
-    enum: CandidateProfileStatus,
-    default: CandidateProfileStatus.NOT_STARTED,
+    enum: TalentProfileStatus,
+    default: TalentProfileStatus.NOT_STARTED,
   })
-  status: CandidateProfileStatus;
+  status: TalentProfileStatus;
 
   @ApiProperty({ required: false, nullable: true })
   @Column({ type: 'text', nullable: true })
