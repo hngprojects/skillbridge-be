@@ -8,33 +8,33 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthResult, AuthService } from '../auth/auth.service';
 import { UsersService } from '../users/users.service';
-import { CompleteCandidateOnboardingDto } from './dto/complete-candidate-onboarding.dto';
+import { CompleteTalentOnboardingDto } from './dto/complete-talent-onboarding.dto';
 import {
-  CandidateProfile,
-  CandidateProfileStatus,
-} from './entities/candidate-profile.entity';
+  TalentProfile,
+  TalentProfileStatus,
+} from './entities/talent-profile.entity';
 
-export type CandidateOnboardingResult = {
+export type TalentOnboardingResult = {
   message: string;
   user: AuthResult['data']['user'];
-  profile: CandidateProfile;
+  profile: TalentProfile;
   tokens: AuthResult['tokens'];
 };
 
 @Injectable()
-export class CandidateService {
+export class TalentService {
   constructor(
-    @InjectRepository(CandidateProfile)
-    private readonly candidateProfileRepository: Repository<CandidateProfile>,
+    @InjectRepository(TalentProfile)
+    private readonly talentProfileRepository: Repository<TalentProfile>,
     private readonly authService: AuthService,
     private readonly usersService: UsersService,
   ) {}
 
   async completeOnboarding(
     userId: string,
-    dto: CompleteCandidateOnboardingDto,
-  ): Promise<CandidateOnboardingResult> {
-    const profile = await this.candidateProfileRepository.manager.transaction(
+    dto: CompleteTalentOnboardingDto,
+  ): Promise<TalentOnboardingResult> {
+    const profile = await this.talentProfileRepository.manager.transaction(
       async (manager) => {
         let user;
         try {
@@ -49,24 +49,24 @@ export class CandidateService {
           throw new ForbiddenException('Onboarding already completed');
         }
 
-        const existingProfile = await manager.findOne(CandidateProfile, {
+        const existingProfile = await manager.findOne(TalentProfile, {
           where: { user_id: userId },
         });
         if (existingProfile) {
-          throw new ConflictException('Candidate profile already exists');
+          throw new ConflictException('Talent profile already exists');
         }
 
-        const nextProfile = manager.create(CandidateProfile, {
+        const nextProfile = manager.create(TalentProfile, {
           user_id: userId,
           role_track: dto.roleTrack.trim(),
           bio: dto.bio?.trim() || null,
-          status: CandidateProfileStatus.NOT_STARTED,
+          status: TalentProfileStatus.NOT_STARTED,
           profile_share_link: null,
           is_published: false,
           published_at: null,
         });
 
-        const savedProfile = await manager.save(CandidateProfile, nextProfile);
+        const savedProfile = await manager.save(TalentProfile, nextProfile);
         await this.usersService.markOnboardingCompleteWithManager(
           manager,
           userId,
@@ -78,7 +78,7 @@ export class CandidateService {
 
     const session = await this.authService.issueSessionForUser(
       userId,
-      'Candidate onboarding completed',
+      'Talent onboarding completed',
     );
 
     return {
