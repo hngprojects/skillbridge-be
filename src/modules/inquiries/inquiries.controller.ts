@@ -13,7 +13,11 @@ export class InquiriesController {
   @Public()
   @Post('waitlist')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Join the waitlist with an email address' })
+  @ApiOperation({
+    summary: 'Join the waitlist',
+    description:
+      'Captures joining intent (talent/employer), full name, email, optional preferred role and referral source.',
+  })
   joinWaitlist(@Body() dto: JoinWaitlistDto) {
     return this.inquiriesService.joinWaitlist(dto);
   }

@@ -9,6 +9,7 @@ import { Resend } from 'resend';
 import { z } from 'zod';
 import { env } from '../../config/env';
 import { redisQueueConnection } from '../../config/redis-queue';
+import { loadMailTemplateFile, substituteMailTemplate } from './mail-templates';
 import type { PasswordResetEmailPayload, SendMailOptions } from './mail.types';
 
 const QUEUE_NAME = 'password-reset-email';
@@ -125,15 +126,23 @@ export class OutboundEmailQueueService
       : '';
     const tokenLineText = `Your reset token: ${token}\n\n`;
     const text = `${linkLine}${tokenLineText}This token expires in ${expiresInMinutes} minute(s). If you did not request a reset, ignore this email.`;
-    const linkHtml = params.resetLink
-      ? `<p><a href="${params.resetLink}">Reset your password</a> (expires in ${expiresInMinutes} minute(s).)</p>`
+
+    const resetLinkBlock = params.resetLink
+      ? `<p style="margin:12px 0 0 0"><a href="${params.resetLink.replace(/"/g, '&quot;')}" style="color:#1f5f6b;font-weight:600;text-decoration:underline">Open password reset link</a></p>`
       : '';
+
+    const rawHtml = loadMailTemplateFile('password-reset.html');
+    const html = substituteMailTemplate(rawHtml, {
+      token,
+      expiresMinutes: String(expiresInMinutes),
+      resetLinkBlock,
+    });
 
     await this.send({
       to: params.to,
       subject: 'Reset your SkillBridge password',
       text,
-      html: `${linkHtml}<p>Your reset token: <strong>${token}</strong></p><p>It expires in ${expiresInMinutes} minute(s). If you did not request a reset, ignore this email.</p>`,
+      html,
     });
   }
 

@@ -14,8 +14,6 @@ import { OAuthUser } from './user-oauth-account.entity';
 export enum UserRole {
   ADMIN = 'admin',
   TALENT = 'talent',
-  /** @deprecated Use TALENT. */
-  CANDIDATE = 'candidate',
   EMPLOYER = 'employer',
 }
 
@@ -72,6 +70,15 @@ export class User {
   @ApiProperty({ enum: USER_ROLE_VALUES, default: UserRole.TALENT })
   @Column({ type: 'enum', enum: USER_ROLE_VALUES, default: UserRole.TALENT })
   role: UserRole;
+
+  @ApiProperty({ required: false, nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    name: 'signup_reason',
+  })
+  signup_reason: string | null;
 
   @Exclude()
   @Column({
