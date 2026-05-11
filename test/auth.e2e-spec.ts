@@ -53,7 +53,7 @@ type RegisterPayload = {
   lastName: string;
   email: string;
   password: string;
-  reasonForJoining: string;
+  reasonForJoining?: string;
   role: UserRole.TALENT | UserRole.EMPLOYER;
 };
 
@@ -595,6 +595,24 @@ describe('Auth (e2e)', () => {
     expect(createdUser?.signup_reason).toBe(registerPayload.reasonForJoining);
     expect(mailService.verificationMessages).toHaveLength(1);
     expect(mailService.verificationMessages[0]?.to).toBe(registerPayload.email);
+  });
+
+  it('POST /auth/register accepts omitting reasonForJoining', async () => {
+    const payload = {
+      firstName: 'Alex',
+      lastName: 'Rivers',
+      email: 'alex-no-reason@example.com',
+      password: 'StrongPass123',
+      role: UserRole.TALENT,
+    };
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(payload)
+      .expect(201);
+
+    const createdUser = await usersService.findByEmail(payload.email);
+    expect(createdUser?.signup_reason).toBeNull();
   });
 
   it('POST /auth/forgot-password returns same 200 payload for unknown email and does not send mail', async () => {

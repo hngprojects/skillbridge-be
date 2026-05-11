@@ -56,6 +56,12 @@ export const env = createEnv({
     PASSWORD_RESET_WEB_BASE_URL: z.string().url().optional(),
 
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
+    /**
+     * Cross-origin browser clients (SPA on a different site than this API) need `none`
+     * so Set-Cookie is accepted; requires HTTPS (`Secure` is enforced when `none`).
+     * Same-site setups can keep `strict` (default).
+     */
+    AUTH_COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).optional(),
     SWAGGER_ENABLED: booleanString.default(true),
     RESEND_API_KEY: z.string().min(1),
     RESEND_MAIL_FROM: z.email(),
