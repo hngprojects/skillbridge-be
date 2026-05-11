@@ -5,10 +5,8 @@ import type { OAuthSignupRole } from './oauth-signup-role';
 
 export const ACCESS_TOKEN_COOKIE = 'access_token';
 export const REFRESH_TOKEN_COOKIE = 'refresh_token';
-export const LINKEDIN_OAUTH_STATE_COOKIE = 'linkedin_oauth_state';
 export const OAUTH_SIGNUP_ROLE_COOKIE = 'oauth_signup_role';
 
-const LINKEDIN_OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 const OAUTH_SIGNUP_ROLE_MAX_AGE_MS = 10 * 60 * 1000;
 
 export const buildAuthCookieOptions = (maxAge: number): CookieOptions => ({
@@ -39,33 +37,6 @@ export const clearAuthCookies = (response: Response): void => {
   const options = buildAuthCookieOptions(0);
   response.clearCookie(ACCESS_TOKEN_COOKIE, options);
   response.clearCookie(REFRESH_TOKEN_COOKIE, options);
-};
-
-/** SameSite=lax so the state cookie is sent on top-level GET to /auth/linkedin/callback after LinkedIn redirects back. */
-export const buildLinkedInOAuthStateCookieOptions = (): CookieOptions => ({
-  httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: 'lax',
-  path: '/',
-  maxAge: LINKEDIN_OAUTH_STATE_MAX_AGE_MS,
-});
-
-export const setLinkedInOAuthStateCookie = (
-  response: Response,
-  state: string,
-): void => {
-  response.cookie(
-    LINKEDIN_OAUTH_STATE_COOKIE,
-    state,
-    buildLinkedInOAuthStateCookieOptions(),
-  );
-};
-
-export const clearLinkedInOAuthStateCookie = (response: Response): void => {
-  response.clearCookie(
-    LINKEDIN_OAUTH_STATE_COOKIE,
-    buildLinkedInOAuthStateCookieOptions(),
-  );
 };
 
 export const buildOAuthSignupRoleCookieOptions = (): CookieOptions => ({
