@@ -18,32 +18,6 @@ const durationString = (defaultValue: string) =>
       return value;
     });
 
-/** Per-field + cross-field rules for LinkedIn OAuth (see exchangeLinkedInCode in auth.service). */
-const linkedInClientIdSchema = z.string().min(1).optional();
-const linkedInClientSecretSchema = z.string().min(1).optional();
-const linkedInRedirectUriSchema = z.url().optional();
-
-const linkedInOAuthEnvTrioSchema = z
-  .object({
-    LINKEDIN_CLIENT_ID: linkedInClientIdSchema,
-    LINKEDIN_CLIENT_SECRET: linkedInClientSecretSchema,
-    LINKEDIN_REDIRECT_URI: linkedInRedirectUriSchema,
-  })
-  .superRefine((data, ctx) => {
-    const presentCount = [
-      data.LINKEDIN_CLIENT_ID,
-      data.LINKEDIN_CLIENT_SECRET,
-      data.LINKEDIN_REDIRECT_URI,
-    ].filter((v) => v != null && v !== '').length;
-    if (presentCount !== 0 && presentCount !== 3) {
-      ctx.addIssue({
-        code: 'custom',
-        message:
-          'LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, and LINKEDIN_REDIRECT_URI must all be set together or all omitted (partial config is invalid; exchangeLinkedInCode requires all three).',
-      });
-    }
-  });
-
 export const env = createEnv({
   server: {
     NODE_ENV: z
@@ -89,44 +63,20 @@ export const env = createEnv({
     SEED_ADMIN_PASSWORD: z.string().min(12).default('Admin@123456'),
     SEED_ADMIN_FULL_NAME: z.string().min(1).default('Admin User'),
 
-    /** Set together (linkedInOAuthEnvTrioSchema). */
-    LINKEDIN_CLIENT_ID: linkedInClientIdSchema,
-    LINKEDIN_CLIENT_SECRET: linkedInClientSecretSchema,
-    LINKEDIN_REDIRECT_URI: linkedInRedirectUriSchema,
-    /** Outbound LinkedIn token/userinfo fetch: time to wait for response headers. */
-    LINKEDIN_HTTP_TIMEOUT_MS: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(15_000),
-    /** Max bytes read from each LinkedIn JSON response body (stream cap). */
-    LINKEDIN_HTTP_MAX_BODY_BYTES: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(262_144),
     GOOGLE_CLIENT_ID: z.string().min(1),
     GOOGLE_CLIENT_SECRET: z.string().min(1),
     GOOGLE_CALLBACK_URL: z.string().min(1),
     GOOGLE_DEFAULT_COUNTRY: z.string().default('Unknown'),
 
     FRONTEND_URL: z.string().default('http://localhost:5173'),
+
+    /** Optional absolute URL for logo in verification / marketing emails. */
+    EMAIL_LOGO_URL: z.string().url().optional(),
+    /** Support address shown in transactional emails. */
+    SUPPORT_EMAIL: z.email().default('support@skillbridge.com'),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
 });
-
-linkedInOAuthEnvTrioSchema.parse({
-  LINKEDIN_CLIENT_ID: env.LINKEDIN_CLIENT_ID,
-  LINKEDIN_CLIENT_SECRET: env.LINKEDIN_CLIENT_SECRET,
-  LINKEDIN_REDIRECT_URI: env.LINKEDIN_REDIRECT_URI,
-});
-
-/**
- * ESLint safe
- */
-export const linkedInHttpTimeoutMs: number = env.LINKEDIN_HTTP_TIMEOUT_MS;
-export const linkedInHttpMaxBodyBytes: number =
-  env.LINKEDIN_HTTP_MAX_BODY_BYTES;
 
 export type Env = typeof env;

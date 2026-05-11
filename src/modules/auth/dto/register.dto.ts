@@ -28,4 +28,10 @@ export class RegisterDto extends RegisterBaseDto {
     message: 'role must be either talent or employer',
   })
   role: UserRole.TALENT | UserRole.EMPLOYER;
+
+  @ApiProperty({ example: 'Find a new role in tech' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  reasonForJoining: string;
 }

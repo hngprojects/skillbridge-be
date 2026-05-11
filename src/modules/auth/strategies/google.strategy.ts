@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, VerifyCallback, Profile } from 'passport-google-oauth20';
 import { env } from '../../../config/env';
@@ -31,25 +31,26 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   ): void {
     const { name, emails, photos } = profile;
 
-    // Validate required fields to prevent runtime crashes
     if (!emails || emails.length === 0) {
       return done(
-        new Error('No email provided by Google OAuth profile'),
-        undefined,
+        new BadRequestException(
+          'No email provided by Google OAuth profile. Use a Google account with an email, or sign up with email and password.',
+        ),
       );
     }
 
-    if (!name?.givenName && !name?.familyName) {
+    if (!name?.givenName || !name?.familyName) {
       return done(
-        new Error('Name information missing from Google OAuth profile'),
-        undefined,
+        new BadRequestException(
+          'Name information missing from Google OAuth profile. Add a given name and family name to your Google account, or sign up with email and password.',
+        ),
       );
     }
 
     const user: GoogleProfile = {
       email: emails[0].value,
-      firstName: name.givenName || '',
-      lastName: name.familyName || '',
+      firstName: name.givenName,
+      lastName: name.familyName,
       picture: photos?.[0]?.value ?? '',
       providerId: profile.id,
       country: env.GOOGLE_DEFAULT_COUNTRY ?? 'Unknown',

@@ -53,6 +53,7 @@ type RegisterPayload = {
   lastName: string;
   email: string;
   password: string;
+  reasonForJoining: string;
   role: UserRole.TALENT | UserRole.EMPLOYER;
 };
 
@@ -75,6 +76,7 @@ const registerPayload: RegisterPayload = {
   lastName: 'Doe',
   email: 'jane@example.com',
   password: 'StrongPass123',
+  reasonForJoining: 'Testing',
   role: UserRole.TALENT,
 };
 
@@ -104,6 +106,7 @@ class InMemoryUsersService {
       is_verified: false,
       onboarding_complete: false,
       role: dto.role ?? UserRole.TALENT,
+      signup_reason: dto.signup_reason ?? null,
       refreshTokenHash: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -394,6 +397,7 @@ class MockMailService {
     to: string;
     otp: string;
     expiresAt: Date;
+    recipientFirstName: string;
   }> = [];
 
   readonly passwordResetMessages: Array<{
@@ -407,6 +411,7 @@ class MockMailService {
     to: string;
     otp: string;
     expiresAt: Date;
+    recipientFirstName: string;
   }) {
     this.verificationMessages.push(params);
     return { id: `mail-${this.verificationMessages.length}` };
@@ -587,6 +592,7 @@ describe('Auth (e2e)', () => {
     const createdUser = await usersService.findByEmail(registerPayload.email);
     expect(createdUser?.is_verified).toBe(false);
     expect(createdUser?.role).toBe(registerPayload.role);
+    expect(createdUser?.signup_reason).toBe(registerPayload.reasonForJoining);
     expect(mailService.verificationMessages).toHaveLength(1);
     expect(mailService.verificationMessages[0]?.to).toBe(registerPayload.email);
   });
