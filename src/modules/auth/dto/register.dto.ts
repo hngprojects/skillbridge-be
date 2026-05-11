@@ -1,5 +1,13 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
-import { IsIn, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { CreateUserDto } from '../../users/dto/create-user.dto';
 import { UserRole } from '../../users/entities/user.entity';
 
@@ -29,9 +37,17 @@ export class RegisterDto extends RegisterBaseDto {
   })
   role: UserRole.TALENT | UserRole.EMPLOYER;
 
-  @ApiProperty({ example: 'Find a new role in tech' })
+  @ApiProperty({
+    example: 'Find a new role in tech',
+    required: false,
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  )
   @IsString()
   @MinLength(1)
   @MaxLength(255)
-  reasonForJoining: string;
+  @Matches(/\S/, { message: 'reasonForJoining must not be only whitespace' })
+  reasonForJoining?: string;
 }

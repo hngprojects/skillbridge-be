@@ -65,6 +65,10 @@ export class UsersService {
     }
 
     const passwordHash = await argon2.hash(dto.password);
+    const signupReason =
+      dto.signup_reason == null || dto.signup_reason.trim() === ''
+        ? null
+        : dto.signup_reason.trim();
     return this.userModelAction.create({
       ...NO_TRANSACTION,
       createPayload: {
@@ -77,7 +81,7 @@ export class UsersService {
         is_verified: false,
         onboarding_complete: false,
         role: dto.role ?? UserRole.TALENT,
-        signup_reason: dto.signup_reason ?? null,
+        signup_reason: signupReason,
       },
     });
   }
