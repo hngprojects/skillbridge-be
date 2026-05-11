@@ -15,7 +15,9 @@ export class InquiriesService {
     private readonly contactMessageRepository: Repository<ContactMessage>,
   ) {}
 
-  async joinWaitlist(dto: JoinWaitlistDto): Promise<{ success: boolean; message: string }> {
+  async joinWaitlist(
+    dto: JoinWaitlistDto,
+  ): Promise<{ success: boolean; message: string }> {
     const normalizedEmail = dto.email.trim().toLowerCase();
     const existingEntry = await this.waitlistRepository.findOne({
       where: { email: normalizedEmail },
