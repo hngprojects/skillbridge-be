@@ -9,10 +9,17 @@ export const OAUTH_SIGNUP_ROLE_COOKIE = 'oauth_signup_role';
 
 const OAUTH_SIGNUP_ROLE_MAX_AGE_MS = 10 * 60 * 1000;
 
+const authCookieSameSite = (): 'strict' | 'lax' | 'none' =>
+  env.AUTH_COOKIE_SAMESITE ?? 'strict';
+
+/** `SameSite=None` must be paired with `Secure` (browsers require it). */
+const authCookieSecure = (): boolean =>
+  authCookieSameSite() === 'none' || env.NODE_ENV === 'production';
+
 export const buildAuthCookieOptions = (maxAge: number): CookieOptions => ({
   httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: 'strict',
+  secure: authCookieSecure(),
+  sameSite: authCookieSameSite(),
   path: '/',
   ...(maxAge > 0 ? { maxAge } : {}),
 });
@@ -41,8 +48,8 @@ export const clearAuthCookies = (response: Response): void => {
 
 export const buildOAuthSignupRoleCookieOptions = (): CookieOptions => ({
   httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  secure: authCookieSecure(),
+  sameSite: authCookieSameSite(),
   path: '/',
   maxAge: OAUTH_SIGNUP_ROLE_MAX_AGE_MS,
 });
