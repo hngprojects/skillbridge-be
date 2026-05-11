@@ -26,7 +26,13 @@ export class InquiriesService {
     }
 
     await this.waitlistRepository.save(
-      this.waitlistRepository.create({ email: normalizedEmail }),
+      this.waitlistRepository.create({
+        email: normalizedEmail,
+        joiningAs: dto.joiningAs,
+        fullName: dto.fullName.trim(),
+        preferredRole: dto.preferredRole?.trim() || null,
+        referralSource: dto.referralSource?.trim() || null,
+      }),
     );
 
     return { message: 'Added to waitlist' };

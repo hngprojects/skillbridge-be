@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
 import { env } from '../../config/env';
+import { loadMailTemplateFile, substituteMailTemplate } from './mail-templates';
 import type { PasswordResetEmailPayload, SendMailOptions } from './mail.types';
 import { OutboundEmailQueueService } from './outbound-email-queue.service';
 
@@ -47,17 +48,47 @@ export class MailService {
     to: string;
     otp: string;
     expiresAt: Date;
+    recipientFirstName: string;
   }) {
     const expiresInMinutes = Math.max(
       1,
       Math.ceil((params.expiresAt.getTime() - Date.now()) / (60 * 1000)),
     );
+    const padded = params.otp.padStart(6, '0');
+    const digits = padded.split('');
+    const digitVars = Object.fromEntries(
+      digits.map((d, i) => [`digit${i + 1}`, d]),
+    ) as Record<string, string>;
+
+    const base = env.FRONTEND_URL.replace(/\/$/, '');
+    const logoUrl =
+      env.EMAIL_LOGO_URL ??
+      'https://placehold.co/140x40/1f5f6b/ffffff/png?text=SkillBridge';
+
+    const vars: Record<string, string> = {
+      name: params.recipientFirstName.trim() || 'there',
+      verifyUrl: `${base}/verify-email`,
+      logoUrl,
+      playStoreUrl: '',
+      appStoreUrl: '',
+      playStoreLink: '#',
+      appStoreLink: '#',
+      supportEmail: env.SUPPORT_EMAIL,
+      unsubscribeUrl: `${base}/email-preferences`,
+      year: String(new Date().getFullYear()),
+      expiresMinutes: String(expiresInMinutes),
+      ...digitVars,
+    };
+
+    const rawHtml = loadMailTemplateFile('verify-code.html');
+    const html = substituteMailTemplate(rawHtml, vars);
+    const text = `Hi ${vars.name},\n\nYour SkillBridge verification code is ${padded}. It expires in ${expiresInMinutes} minute(s).\n`;
 
     return this.send({
       to: params.to,
       subject: 'Verify your SkillBridge email',
-      text: `Your SkillBridge verification code is ${params.otp}. It expires in ${expiresInMinutes} minute(s).`,
-      html: `<p>Your SkillBridge verification code is <strong>${params.otp}</strong>.</p><p>It expires in ${expiresInMinutes} minute(s).</p>`,
+      text,
+      html,
     });
   }
 }

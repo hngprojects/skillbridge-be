@@ -17,26 +17,26 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { setAuthCookies } from '../auth/auth.cookies';
 import { UserRole } from '../users/entities/user.entity';
-import { CandidateService } from './candidate.service';
-import { CompleteCandidateOnboardingDto } from './dto/complete-candidate-onboarding.dto';
+import { CompleteTalentOnboardingDto } from './dto/complete-talent-onboarding.dto';
+import { TalentService } from './talent.service';
 
-@ApiTags('candidate')
+@ApiTags('talent')
 @ApiCookieAuth()
-@Controller('candidate')
+@Controller('talent')
 @Roles(UserRole.TALENT)
-export class CandidateController {
-  constructor(private readonly candidateService: CandidateService) {}
+export class TalentController {
+  constructor(private readonly talentService: TalentService) {}
 
   @Post('onboarding')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Complete candidate onboarding' })
+  @ApiOperation({ summary: 'Complete talent onboarding' })
   @ApiForbiddenResponse({ description: 'Onboarding already completed' })
   async completeOnboarding(
     @CurrentUser('sub') userId: string,
-    @Body() dto: CompleteCandidateOnboardingDto,
+    @Body() dto: CompleteTalentOnboardingDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.candidateService.completeOnboarding(userId, dto);
+    const result = await this.talentService.completeOnboarding(userId, dto);
     setAuthCookies(response, result.tokens);
     return {
       message: result.message,
