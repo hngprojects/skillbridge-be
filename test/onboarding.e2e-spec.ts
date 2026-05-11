@@ -16,6 +16,7 @@ import { TransformInterceptor } from '../src/common/interceptors/transform.inter
 import { env } from '../src/config/env';
 import { TalentController } from '../src/modules/talent/talent.controller';
 import { TalentService } from '../src/modules/talent/talent.service';
+import { UploadService } from '../src/modules/upload/upload.service';
 import {
   TalentProfile,
   TalentProfileStatus,
@@ -400,6 +401,7 @@ describe('Onboarding (e2e)', () => {
             onModuleInit: jest.fn(),
           },
         },
+        { provide: UploadService, useValue: { uploadAvatar: jest.fn() } },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_GUARD, useClass: RolesGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
@@ -497,11 +499,11 @@ describe('Onboarding (e2e)', () => {
       .post('/employer/onboarding')
       .set('Cookie', cookieHeader)
       .send({
-        companyName: 'Acme Labs',
-        companySize: '11-50',
-        industry: 'Technology',
-        websiteUrl: 'https://acmelabs.example',
-        hiringRegion: 'Remote, Africa',
+        joiningAs: 'recruiter',
+        desiredRoles: ['frontend_developer', 'backend_developer'],
+        region: 'Africa',
+        hiringCountRange: '6_10',
+        companyWebsite: 'https://acmelabs.example',
       })
       .expect(200);
 
@@ -514,11 +516,11 @@ describe('Onboarding (e2e)', () => {
       },
       profile: {
         user_id: user.id,
-        company_name: 'Acme Labs',
-        company_size: '11-50',
-        industry: 'Technology',
-        website_url: 'https://acmelabs.example',
-        hiring_region: 'Remote, Africa',
+        joining_as: 'recruiter',
+        desired_roles: ['frontend_developer', 'backend_developer'],
+        region: 'Africa',
+        hiring_count_range: '6_10',
+        company_website: 'https://acmelabs.example',
       },
     });
   });

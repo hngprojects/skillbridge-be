@@ -34,9 +34,42 @@ export class TalentProfile {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @ApiProperty({ example: 'frontend' })
-  @Column({ type: 'varchar', length: 50 })
-  role_track: string;
+  @ApiProperty({ example: 'frontend', required: false, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  role_track: string | null;
+
+  @ApiProperty({
+    example: ['frontend_developer', 'backend_developer'],
+    required: false,
+    nullable: true,
+    type: [String],
+  })
+  @Column({ type: 'text', array: true, nullable: true })
+  role_tracks: string[] | null;
+
+  @ApiProperty({
+    example: 'land_first_role',
+    required: false,
+    nullable: true,
+  })
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  goal: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  region: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  education_level: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  linkedin_url: string | null;
+
+  @ApiProperty({ default: 0 })
+  @Column({ type: 'integer', default: 0 })
+  onboarding_step: number;
 
   @ApiProperty({ enum: TalentProfileStatus })
   @Column({
