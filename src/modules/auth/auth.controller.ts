@@ -49,6 +49,7 @@ import {
   normalizeOAuthSignupRole,
   type OAuthSignupRole,
 } from './oauth-signup-role';
+import { ErrorMessages, SuccessMessages } from '../../shared';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -59,7 +60,7 @@ export class AuthController {
     const normalizedRole = normalizeOAuthSignupRole(role);
     if (!normalizedRole) {
       throw new HttpException(
-        'Invalid OAuth signup role',
+        ErrorMessages.AUTH.INVALID_OAUTH_SIGNUP_ROLE,
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -247,7 +248,7 @@ export class AuthController {
     await this.authService.logoutByRefreshToken(refreshToken);
     clearAuthCookies(response);
     return {
-      message: 'Logged out',
+      message: SuccessMessages.AUTH.LOGGED_OUT,
       status: 'success',
     };
   }
