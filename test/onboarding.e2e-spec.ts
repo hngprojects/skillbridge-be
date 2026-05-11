@@ -28,7 +28,8 @@ import {
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
 import { AuthService } from '../src/modules/auth/auth.service';
-import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
+import { PasswordResetOtp } from '../src/modules/auth/entities/password-reset-otp.entity';
+import { PasswordResetOtpService } from '../src/modules/auth/password-reset-otp.service';
 import { PasswordResetQueueService } from '../src/modules/auth/password-reset-queue.service';
 import { VerificationOtpService } from '../src/modules/auth/verification-otp.service';
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
@@ -377,15 +378,18 @@ describe('Onboarding (e2e)', () => {
         },
         { provide: MailService, useClass: StubMailService },
         {
-          provide: getRepositoryToken(PasswordResetToken),
+          provide: PasswordResetOtpService,
           useValue: {
-            manager: {
-              transaction: jest.fn(
-                async (_fn: (m: unknown) => Promise<void>) => undefined,
-              ),
-            },
-            findOne: jest.fn(),
+            issue: jest
+              .fn()
+              .mockResolvedValue({ code: '123456', expiresAt: new Date() }),
+            consume: jest.fn().mockResolvedValue(true),
+            countRecentResends: jest.fn().mockResolvedValue(0),
           },
+        },
+        {
+          provide: getRepositoryToken(PasswordResetOtp),
+          useValue: {},
         },
         {
           provide: PasswordResetQueueService,

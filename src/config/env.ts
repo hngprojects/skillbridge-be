@@ -52,8 +52,7 @@ export const env = createEnv({
       .positive()
       .default(3),
 
-    PASSWORD_RESET_EXPIRES_IN: durationString('1h'),
-    PASSWORD_RESET_WEB_BASE_URL: z.string().url().optional(),
+    PASSWORD_RESET_OTP_EXPIRES_IN: durationString('15m'),
 
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
     /**
