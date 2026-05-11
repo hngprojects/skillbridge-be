@@ -117,7 +117,7 @@ export class AuthService {
       last_name: dto.lastName,
       country: OAUTH_DEFAULT_COUNTRY,
       role: dto.role,
-      signup_reason: dto.reasonForJoining ?? null,
+      signup_reason: dto.reasonForJoining,
     });
 
     const issuedOtp = await this.verificationOtpService.issue(
