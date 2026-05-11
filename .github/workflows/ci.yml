@@ -31,8 +31,14 @@ jobs:
       # - name: Check formatting
       #   run: pnpm check-format
 
-      # - name: Lint code
-      #   run: pnpm check-lint
+      - name: Lint code
+        timeout-minutes: 5
+        run: pnpm run check-lint:ci
+
+      - name: Lint debug
+        if: failure() && steps.lint.outcome == 'failure'
+        timeout-minutes: 5
+        run: pnpm exec eslint 'src/**/*.ts' 'test/**/*.ts' --debug
 
       - name: Run tests
         run: pnpm test -- --passWithNoTests

@@ -23,17 +23,17 @@ jobs:
         run: |
           if [ "${{ github.ref_name }}" = "dev" ]; then
             echo "dir=dev" >> "$GITHUB_OUTPUT"
-            echo "app=skillbridge-dev" >> "$GITHUB_OUTPUT"
+            echo "app=skillbridge-api-dev" >> "$GITHUB_OUTPUT"
             echo "env_flag=dev" >> "$GITHUB_OUTPUT"
             echo "environment=dev" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.ref_name }}" = "staging" ]; then
             echo "dir=staging" >> "$GITHUB_OUTPUT"
-            echo "app=skillbridge-staging" >> "$GITHUB_OUTPUT"
+            echo "app=skillbridge-api-staging" >> "$GITHUB_OUTPUT"
             echo "env_flag=staging" >> "$GITHUB_OUTPUT"
             echo "environment=staging" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.ref_name }}" = "main" ]; then
             echo "dir=production" >> "$GITHUB_OUTPUT"
-            echo "app=skillbridge-prod" >> "$GITHUB_OUTPUT"
+            echo "app=skillbridge-api-prod" >> "$GITHUB_OUTPUT"
             echo "env_flag=production" >> "$GITHUB_OUTPUT"
             echo "environment=production" >> "$GITHUB_OUTPUT"
           else
