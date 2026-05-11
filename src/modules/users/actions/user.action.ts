@@ -19,6 +19,7 @@ export type CreateUserWithOauthLinkUserPayload = {
 export type CreateUserWithOauthLinkOAuthPayload = {
   provider: string;
   providerId: string;
+  role: UserRole.TALENT | UserRole.EMPLOYER;
 };
 
 @Injectable()
@@ -53,7 +54,7 @@ export class UserModelAction extends AbstractModelAction<User> {
       avatar_url: userPayload.avatar_url,
       is_verified: true,
       onboarding_complete: false,
-      role: UserRole.CANDIDATE,
+      role: oauthPayload.role,
     });
     await userRepo.save(user);
 
@@ -82,7 +83,11 @@ export class UserModelAction extends AbstractModelAction<User> {
             country: params.country,
             avatar_url: params.avatar_url,
           },
-          { provider: params.provider, providerId: params.providerId },
+          {
+            provider: params.provider,
+            providerId: params.providerId,
+            role: params.role,
+          },
         );
       },
     );

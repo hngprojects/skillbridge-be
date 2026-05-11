@@ -33,11 +33,11 @@ Auth is a Week 1 deliverable and the foundation every other SkillBridge service 
 
 SkillBridge has three distinct roles, each with a different access surface:
 
-| Role        | Access                                                      |
-| ----------- | ----------------------------------------------------------- |
-| `candidate` | Assessment pipeline, dashboard, verified profile            |
-| `employer`  | Discovery dashboard, candidate profiles (Job Ready only)    |
-| `admin`     | Moderation queue, submission review, scoring oversight      |
+| Role        | Access                                                   |
+| ----------- | -------------------------------------------------------- |
+| `talent`    | Assessment pipeline, dashboard, verified profile         |
+| `employer`  | Discovery dashboard, candidate profiles (Job Ready only) |
+| `admin`     | Moderation queue, submission review, scoring oversight   |
 
 > Admin accounts are **not self-registerable**. They are provisioned directly in the database or via an internal endpoint.
 
@@ -45,10 +45,10 @@ SkillBridge has three distinct roles, each with a different access surface:
 
 ## Signup Methods
 
-| Method                | Email verified?                                       | Password              |
-| --------------------- | ----------------------------------------------------- | --------------------- |
-| Email/password        | Required (manual, 5 - 15 mins otp)                    | Argon hash stored     |
-| Google/LinkedIn OAuth | Trust the provider for email verification             | No password           |
+| Method                | Email verified?                           | Password          |
+| --------------------- | ----------------------------------------- | ----------------- |
+| Email/password        | Required (manual, 15-minute OTP)          | Argon hash stored |
+| Google/LinkedIn OAuth | Trust the provider for email verification | No password       |
 
 ---
 
@@ -64,7 +64,7 @@ CREATE TABLE users (
   email               VARCHAR(255)  NOT NULL UNIQUE,
   password_hash       VARCHAR(255)  NULL,            -- NULL for OAuth-only accounts
   country             VARCHAR(100)  NOT NULL,
-  role                VARCHAR(20)   NOT NULL DEFAULT 'candidate', -- candidate | employer | admin
+  role                VARCHAR(20)   NOT NULL DEFAULT 'talent', -- talent | employer | admin
   is_verified         BOOLEAN       NOT NULL DEFAULT false,
   onboarding_complete BOOLEAN       NOT NULL DEFAULT false,
   created_at          TIMESTAMP     NOT NULL DEFAULT NOW()
@@ -174,7 +174,7 @@ Tokens are never returned in the response body. The client reads the user object
   "user": {
     "id": "uuid",
     "email": "string",
-    "role": "candidate | employer | admin",
+    "role": "talent | employer | admin",
     "onboardingComplete": false
   }
 }
@@ -185,7 +185,7 @@ Tokens are never returned in the response body. The client reads the user object
 ```json
 {
   "sub": "user-uuid",
-  "role": "candidate | employer | admin",
+  "role": "talent | employer | admin",
   "email": "user@email.com",
   "onboardingComplete": true,
   "iat": 1234567890,
@@ -197,21 +197,24 @@ Tokens are never returned in the response body. The client reads the user object
 
 ```
 1. Read role + onboardingComplete from user object in response body
-2. If onboardingComplete = false → redirect to /onboarding/role-select (all roles)
+2. If onboardingComplete = false:
+   - candidate → redirect to /candidate/onboarding
+   - employer  → redirect to /employer/onboarding
+   - admin     → redirect to /admin
 3. If onboardingComplete = true:
-   - candidate → /dashboard
+   - talent → /dashboard
    - employer  → /discovery
    - admin     → /admin
 ```
 
 ### Web vs Mobile cookie handling
 
-|                       | Web (browser)                                          | Mobile (React Native / Flutter)                                            |
-| --------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------- |
-| Cookie storage        | Native browser cookie jar                              | Manual — interceptor extracts from `Set-Cookie` header                     |
-| Cookie sending        | Automatic on every request                             | Manual — interceptor attaches `Cookie` header                              |
-| Secure storage        | httpOnly (JS cannot read)                              | `react-native-encrypted-storage` or `react-native-keychain`               |
-| Token refresh         | Automatic via interceptor on 401                       | Same — Axios interceptor fires `POST /auth/refresh`                        |
+|                | Web (browser)                    | Mobile (React Native / Flutter)                             |
+| -------------- | -------------------------------- | ----------------------------------------------------------- |
+| Cookie storage | Native browser cookie jar        | Manual — interceptor extracts from `Set-Cookie` header      |
+| Cookie sending | Automatic on every request       | Manual — interceptor attaches `Cookie` header               |
+| Secure storage | httpOnly (JS cannot read)        | `react-native-encrypted-storage` or `react-native-keychain` |
+| Token refresh  | Automatic via interceptor on 401 | Same — Axios interceptor fires `POST /auth/refresh`         |
 
 **Backend is identical for both.** The mobile client just does manually what the browser does automatically.
 
@@ -239,18 +242,18 @@ const api = axios.create({
 
 ## Auth Flows
 
-There are two distinct signup/login paths. Both converge at the same onboarding step after account creation. Each is fully documented below so the team can implement them independently.
+There are two distinct auth paths from the first touchpoint: candidate and employer. They do not converge at a shared role-selection step after account creation. Each path stays role-specific through signup, OAuth continuation, and onboarding, and should be implemented that way end to end.
 
 ### At a glance
 
 |                       | Flow A — Email / Password                              | Flow B — OAuth (Google / LinkedIn)                 |
 | --------------------- | ------------------------------------------------------ | -------------------------------------------------- |
 | Entry point           | Registration form                                      | "Continue with Google/LinkedIn" button             |
-| Fields collected      | firstName, lastName, email, country, password          | Pulled from provider profile                       |
-| Email verification    | Manual — 5 - 15 mins otp sent to inbox                 | Automatic — provider pre-verifies                  |
+| Fields collected      | firstName, lastName, email, password, role             | Pulled from provider profile                       |
+| Email verification    | Manual — 15-minute OTP sent to inbox                  | Automatic — provider pre-verifies                  |
 | Password              | Required (Argon hashed, cost 12)                       | Never set (`NULL`)                                 |
 | Account conflict      | N/A                                                    | Auto-link if email already exists                  |
-| After signup          | Must verify email → then onboarding                    | Straight to onboarding                             |
+| After signup          | Must verify email → then onboarding                   | Straight to onboarding                             |
 | Onboarding required   | Yes (all new users)                                    | Yes (all new users)                                |
 
 **Both paths issue the same JWT and set the same httpOnly refresh token cookie. Post-onboarding behaviour is identical regardless of how the user signed up.**
@@ -259,10 +262,10 @@ There are two distinct signup/login paths. Both converge at the same onboarding 
 
 ```
 Flow A — Email/Password
-  Register → Verify email → [Onboarding] → Dashboard
+  Register → Verify email → [Candidate or Employer Onboarding] → Dashboard/Discovery
 
 Flow B — OAuth
-  Click provider → Consent screen → Callback (auto-link or create) → [Onboarding if new] → Dashboard
+  Click provider → Consent screen → Callback (auto-link or create) → [Role-specific onboarding if new] → Dashboard/Discovery
 
 Both flows share:
   Token Refresh (Flow C)
@@ -279,7 +282,7 @@ Both flows share:
 ```
 POST /auth/register
   │
-  ├── Validate request body (firstName, lastName, email, country, password)
+  ├── Validate request body (firstName, lastName, email, password, role)
   │     └── Fail → 422 { status: "error", message: "Validation failed", fields: [...] }
   │
   ├── Check if email already exists in users table
@@ -288,10 +291,10 @@ POST /auth/register
   ├── Hash password (Argon, cost factor 12)
   │
   ├── INSERT into users:
-  │     { first_name, last_name, email, password_hash, country,
-  │       role: null, is_verified: false, onboarding_complete: false }
+  │     { first_name, last_name, email, password_hash, country: "Unknown",
+  │       role: "talent" | "employer", is_verified: false, onboarding_complete: false }
   │
-  ├── Generate email verification OTP (5 - 15 mins TTL)
+  ├── Generate email verification OTP (15-minute TTL; `VERIFICATION_OTP_EXPIRES_IN`, default `15m`)
   │     Store: { user_id, otp_hash, expires_at } in verification_otps table
   │
   └── Send verification email → OTP code
@@ -303,7 +306,7 @@ POST /auth/register
 ```
 POST /auth/verify-email
   │
-  ├── Look up OTP in verification_otps
+  ├── Look up OTP in verification_otps (unused, expires_at > now; OTP TTL defaults to 15 minutes via VERIFICATION_OTP_EXPIRES_IN)
   │     ├── Not found → 400 { status: "error", message: "Invalid otp" }
   │     └── Found but expired → 400 { status: "error", message: "Otp expired. Request a new one." }
   │
@@ -313,8 +316,10 @@ POST /auth/verify-email
   │
   ├── Issue access token (JWT, 15min) + set refresh token cookie (httpOnly, 7 days)
   │
-  └── Response: 200 { status: "success", data: { id, email, onboardingComplete: false } }
-        → Client redirects to /onboarding/role-select
+  └── Response: 200 { status: "success", data: { id, email, role, onboardingComplete: false } }
+        → Client redirects by role:
+            candidate → /candidate/onboarding
+            employer  → /employer/onboarding
 ```
 
 #### A3. Login
@@ -334,8 +339,8 @@ POST /auth/login
   ├── Issue access token (JWT, 15min) + set refresh token cookie (httpOnly, 7 days)
   │
   └── Response: 200 { status: "success", data: { id, email, role, onboardingComplete } }
-        → Client reads onboardingComplete:
-            false → redirect to /onboarding/role-select
+        → Client reads role + onboardingComplete:
+            false → redirect to /candidate/onboarding or /employer/onboarding based on role
             true  → redirect to /dashboard or /discovery based on role
 ```
 
@@ -349,7 +354,7 @@ Step 1 — Request reset
     │     { status: "success", message: "If that email exists, a reset link has been sent" }
     │
     └── If email found in users:
-          Generate reset token (random UUID, 1hr TTL)
+          Generate opaque reset token (random bytes, base64url) with configured TTL
           Store: { user_id, token_hash, expires_at, used: false }
           Send reset token to user (out-of-band) — client submits it in JSON body to POST /auth/reset-password
 
@@ -358,7 +363,7 @@ Step 2 — Submit new password
     │
     ├── Look up token → not found/expired → 400 { status: "error", message: "Invalid or expired token" }
     ├── Check used flag → already used → 400 { status: "error", message: "Token already used" }
-    ├── Validate password === confirmPassword → mismatch → 422
+    ├── Validate password === confirmPassword (DTO) → mismatch → 400
     │
     ├── Hash new password → UPDATE users SET password_hash = $hash
     ├── Mark token as used
@@ -403,8 +408,8 @@ Provider redirects to:
   │   ── CASE 1: OAuth account found ──────────────────────────────────────────
   │   │   This is a returning OAuth user. Fetch the linked users row.
   │   │   Issue access token + set refresh cookie.
-  │   │   Response: **302** to `{CORS_ORIGIN}` + path from Post-login Redirect Logic; cookies set on response
-  │   │   (onboarding incomplete → `/onboarding/role-select`; else role → `/dashboard` | `/discovery` | `/admin`)
+  │   │   Response: **302** to frontend path from Post-login Redirect Logic; cookies set on response
+  │   │   (onboarding incomplete → `/candidate/onboarding` | `/employer/onboarding`; else role → `/dashboard` | `/discovery` | `/admin`)
   │   │
   │   └── OAuth account NOT found → check users WHERE email = $email
   │
@@ -417,26 +422,26 @@ Provider redirects to:
   │       │   Response: **302** to Post-login Redirect path; cookies set on response
   │       │
   │       │   ⚠ If onboardingComplete = false (edge case: user registered but never finished
-  │       │     onboarding) → redirect to /onboarding/role-select as usual.
+  │       │     onboarding) → redirect to the correct role-specific onboarding path as usual.
   │       │
   │       └── CASE 3: Email not found (brand new user) ──────────────────────
   │               INSERT INTO users:
   │                 { first_name, last_name, email, password: NULL,
-  │                   is_verified: true, onboarding_complete: false }
+  │                   role, is_verified: true, onboarding_complete: false }
   │               INSERT INTO user_oauth_accounts { user_id, provider, provider_id }
   │               Issue access token + set refresh cookie.
-  │               Response: **302** to `/onboarding/role-select` (new users); cookies set on response
+  │               Response: **302** to role-specific onboarding path for that user (new users); cookies set on response
 ```
 
 #### B3. Key differences from Email/Password flow
 
-|                       | Email / Password                      | OAuth                                                |
-| --------------------- | ------------------------------------- | ---------------------------------------------------- |
-| Password              | Required (Argon hashed)               | Never set (`NULL`)                                   |
-| Email verification    | Manual (5 - 15mins otp via email)      | Automatic (`is_verified = true` on create)           |
-| Name collection       | From registration form                | From provider profile                                |
-| Account conflict      | N/A                                   | Auto-link via `user_oauth_accounts`                  |
-| Onboarding step       | Always required after verify          | Always required for new users                        |
+|                    | Email / Password                 | OAuth                                      |
+| ------------------ | -------------------------------- | ------------------------------------------ |
+| Password           | Required (Argon hashed)          | Never set (`NULL`)                         |
+| Email verification | Manual (15-minute OTP via email) | Automatic (`is_verified = true` on create) |
+| Name collection    | From registration form           | From provider profile                      |
+| Account conflict   | N/A                              | Auto-link via `user_oauth_accounts`        |
+| Onboarding step    | Always required after verify     | Always required for new users              |
 
 ---
 
@@ -482,30 +487,33 @@ POST /auth/logout
 
 ---
 
-### Flow E — Onboarding (shared by both A and B)
+### Flow E — Onboarding (role-specific after A or B)
 
-All new users — regardless of signup method — must complete this step before accessing their dashboard. The JWT issued before this step has `onboardingComplete: false`. After this step it is reissued as `true`.
+All new users must complete their role-specific onboarding before accessing their final product surface. The JWT issued before this step has `onboardingComplete: false`. After this step it is reissued as `true`.
 
 ```
-POST /onboarding/role
-  │  Requires: access_token cookie
+POST /candidate/onboarding
+  │  Requires: access_token cookie for role = talent
   │
   ├── Validate onboardingComplete = false (if true → 403 { status: "error", message: "Already completed" })
   │
-  ├── IF role = "candidate":
-  │     Validate roleTrack is present and valid
-  │     INSERT INTO candidates { user_id, role_track, status: "not_started" }
-  │     UPDATE users SET role = "candidate", onboarding_complete = true
-  │
-  ├── IF role = "employer":
-  │     Validate companyName is present
-  │     INSERT INTO employers { user_id, company_name }
-  │     UPDATE users SET role = "employer", onboarding_complete = true
-  │
+  ├── Validate roleTrack is present and valid
+  ├── INSERT INTO candidate_profiles { user_id, role_track, status: "not_started" }
+  ├── UPDATE users SET onboarding_complete = true
   ├── Reissue access token cookie with updated payload:
-  │     { ..., role: "candidate|employer", onboardingComplete: true }
+  │     { ..., role: "talent", onboardingComplete: true }
+  └── Response: 200 { redirectTo: "/dashboard" }
+
+POST /employer/onboarding
+  │  Requires: access_token cookie for role = employer
   │
-  └── Response: 200 { redirectTo: "/dashboard" | "/discovery" }
+  ├── Validate onboardingComplete = false (if true → 403 { status: "error", message: "Already completed" })
+  ├── Validate employer onboarding fields (companyName, etc.)
+  ├── INSERT INTO employer_profiles { user_id, company_name, ... }
+  ├── UPDATE users SET onboarding_complete = true
+  ├── Reissue access token cookie with updated payload:
+  │     { ..., role: "employer", onboardingComplete: true }
+  └── Response: 200 { redirectTo: "/discovery" }
 ```
 
 ---
@@ -531,10 +539,10 @@ Register with email and password.
 ```json
 {
   "firstName": "string",
-  "lastName":  "string",
-  "email":     "string",
-  "country":   "string",
-  "password":  "string (min 8 chars)"
+  "lastName": "string",
+  "email": "string",
+  "password": "string (min 8 chars)",
+  "role": "talent | employer"
 }
 ```
 
@@ -557,7 +565,7 @@ Confirm email address using OTP.
 ```json
 {
   "email": "string",
-  "otp":   "string"
+  "otp": "string"
 }
 ```
 
@@ -573,13 +581,15 @@ Confirm email address using OTP.
 ```
 
 > Sets `access_token` and `refresh_token` as httpOnly cookies.
-> Client reads `onboardingComplete` from user object and redirects to `/onboarding/role-select`.
+> Client reads `role` and `onboardingComplete` from user object and redirects to the correct role-specific onboarding path.
+
+Verification OTPs expire after **15 minutes** by default (`VERIFICATION_OTP_EXPIRES_IN`, e.g. `15m` in `src/config/env.ts` / `.env`). `POST /auth/verify-email` rejects OTPs after `expires_at`. Resending issues a **new** OTP with a fresh **15-minute** window (previous unused OTPs for that user are invalidated).
 
 ---
 
 ### `POST /auth/resend-verification`
 
-Resend the verification email. For users who missed or lost the original email.
+Resend the verification email. For users who missed or lost the original email. The new OTP uses the same TTL as registration (**15 minutes** by default; configured with `VERIFICATION_OTP_EXPIRES_IN`).
 
 **Request body:**
 
@@ -609,7 +619,7 @@ Email/password login.
 
 ```json
 {
-  "email":    "string",
+  "email": "string",
   "password": "string"
 }
 ```
@@ -621,7 +631,7 @@ Email/password login.
        "user": {
          "id":                 "uuid",
          "email":              "string",
-         "role":               "candidate | employer | admin",
+         "role":               "talent | employer | admin",
          "onboardingComplete": "boolean"
        }
      }
@@ -667,13 +677,13 @@ Initiate LinkedIn OAuth flow. Redirects the browser to LinkedIn’s authorizatio
 
 **Environment (`src/config/env.ts`):**
 
-`LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, and `LINKEDIN_REDIRECT_URI` must be **all set** or **all omitted**. If only one or two are set, the process **fails at startup** with a **`ZodError`** (the app never listens; you will not get an HTTP `503` from the API). 
+`LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, and `LINKEDIN_REDIRECT_URI` must be **all set** or **all omitted**. If only one or two are set, the process **fails at startup** with a **`ZodError`** (the app never listens; you will not get an HTTP `503` from the API).
 
-| Variable | Description |
-| -------- | ----------- |
-| `LINKEDIN_CLIENT_ID` | Client ID from the LinkedIn product / app |
-| `LINKEDIN_CLIENT_SECRET` | Client secret (used on the callback for token exchange) |
-| `LINKEDIN_REDIRECT_URI` | Full callback URL, must match the app’s authorized redirect URL (e.g. `http://localhost:3000/api/v1/auth/linkedin/callback`) |
+| Variable                 | Description                                                                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `LINKEDIN_CLIENT_ID`     | Client ID from the LinkedIn product / app                                                                                    |
+| `LINKEDIN_CLIENT_SECRET` | Client secret (used on the callback for token exchange)                                                                      |
+| `LINKEDIN_REDIRECT_URI`  | Full callback URL, must match the app’s authorized redirect URL (e.g. `http://localhost:3000/api/v1/auth/linkedin/callback`) |
 
 **Errors (initiate only, after a healthy boot):**
 
@@ -694,10 +704,11 @@ If **all three** variables are **omitted**, the app still starts. In that case, 
 
 **Callback success response:**
 
-`302 Found` — `Location` is `{first CORS_ORIGIN}{path}` per **Post-login Redirect Logic**:
+`302 Found` — `Location` is `{FRONTEND_URL}{path}` per **Post-login Redirect Logic**:
 
-- `onboardingComplete === false` → `/onboarding/role-select`
-- `onboardingComplete === true` and `role === candidate` → `/dashboard`
+- `onboardingComplete === false` and `role === talent` → `/candidate/onboarding`
+- `onboardingComplete === false` and `role === employer` → `/employer/onboarding`
+- `onboardingComplete === true` and `role === talent` → `/dashboard`
 - `onboardingComplete === true` and `role === employer` → `/discovery`
 - `onboardingComplete === true` and `role === admin` → `/admin`
 
@@ -705,13 +716,13 @@ If **all three** variables are **omitted**, the app still starts. In that case, 
 
 **Callback error responses (browser redirect):**
 
-The callback is a full-page browser navigation. Failures use **`302 Found`** to **`{first CORS_ORIGIN}/login`** with an `error` query param and clear **`linkedin_oauth_state`**. Do **not** expect **`503` JSON** from the callback (including `ServiceUnavailableException` from token exchange — it is caught and mapped here).
+The callback is a full-page browser navigation. Failures use **`302 Found`** to **`{FRONTEND_URL}/login`** with an `error` query param and clear **`linkedin_oauth_state`**. Do **not** expect **`503` JSON** from the callback (including `ServiceUnavailableException` from token exchange — it is caught and mapped here).
 
-| Situation | `Location` (relative to first CORS origin) |
-| --------- | -------------------------------------------- |
-| CSRF / state validation: `state` query does not match the `linkedin_oauth_state` cookie, or the cookie is missing while `state` is present | `/login?error=oauth_state_mismatch` |
-| User cancelled at LinkedIn, or provider returned an error, or required query params (`code`, `state`) are missing | `/login?error=oauth_cancelled` |
-| Other failures after state checks (e.g. token exchange, profile fetch, or “not fully configured” at exchange) | `/login?error=oauth_failed` |
+| Situation                                                                                                                                  | `Location` (relative to first CORS origin) |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| CSRF / state validation: `state` query does not match the `linkedin_oauth_state` cookie, or the cookie is missing while `state` is present | `/login?error=oauth_state_mismatch`        |
+| User cancelled at LinkedIn, or provider returned an error, or required query params (`code`, `state`) are missing                          | `/login?error=oauth_cancelled`             |
+| Other failures after state checks (e.g. token exchange, profile fetch, or “not fully configured” at exchange)                              | `/login?error=oauth_failed`                |
 
 ---
 
@@ -769,6 +780,8 @@ Request a password reset link.
 
 > Always returns 200 regardless of whether the email exists (prevents enumeration).
 
+> When `REDIS_URL` is set, token issuance and password-reset email delivery run in BullMQ workers (Redis) so the handler returns without awaiting Argon2/DB/email I/O for the known-email case. Without `REDIS_URL`, the same work is scheduled on the Node event loop after the response is sent (still not awaited on the request path).
+
 ---
 
 ### `POST /auth/reset-password`
@@ -779,8 +792,8 @@ Set a new password using a reset token.
 
 ```json
 {
-  "token":           "string",
-  "password":        "string",
+  "token": "string",
+  "password": "string",
   "confirmPassword": "string"
 }
 ```
@@ -790,7 +803,8 @@ Set a new password using a reset token.
 ```json
 200  { "status": "success", "message": "Password updated. Please log in." }
 400  { "status": "error", "message": "Invalid or expired token" }
-422  { "status": "error", "message": "Passwords do not match" }
+400  { "status": "error", "message": "Token already used" }
+400  { "status": "error", "message": "Passwords do not match" }
 ```
 
 > All active refresh tokens for the user are revoked on success.
@@ -801,11 +815,11 @@ Set a new password using a reset token.
 
 Complete role selection and profile setup. Called after email verification or first OAuth login.
 
-**Request body — candidate:**
+**Request body — talent:**
 
 ```json
 {
-  "role":      "candidate",
+  "role": "talent",
   "roleTrack": "frontend | data | design | ..."
 }
 ```
@@ -814,7 +828,7 @@ Complete role selection and profile setup. Called after email verification or fi
 
 ```json
 {
-  "role":        "employer",
+  "role": "employer",
   "companyName": "string"
 }
 ```
@@ -849,7 +863,7 @@ Get the currently authenticated user. Cookie sent automatically.
        "firstName":          "string",
        "lastName":           "string",
        "email":              "string",
-       "role":               "candidate | employer | admin",
+       "role":               "talent | employer | admin",
        "country":            "string",
        "onboardingComplete": "boolean",
        "isVerified":         "boolean",
@@ -862,34 +876,34 @@ Get the currently authenticated user. Cookie sent automatically.
 
 ## Business Rules
 
-| Rule                                    | Detail                                                                                      |
-| --------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Email verification is mandatory         | Unverified users get `EMAIL_NOT_VERIFIED` 403 on login — client starts verification flow    |
-| Unverified login triggers resend flow   | Client redirects to "check your inbox" screen with resend button                            |
-| OAuth users are auto-verified           | Google and LinkedIn pre-verify emails — no verification email sent                          |
-| Role selection is required              | OAuth and email users must complete onboarding before dashboard access                      |
-| Employers must supply company name      | Required field during onboarding, not optional                                              |
-| Candidates must select a role track     | Required to enter the assessment pipeline                                                   |
-| Password reset revokes all sessions     | All refresh tokens for the user are revoked on reset                                        |
-| Admin accounts are not self-registerable| Provisioned directly or via internal endpoint                                               |
-| Auto-link on OAuth conflict             | If OAuth email matches existing account, accounts are silently linked via `user_oauth_accounts` |
-| Tokens never in response body           | Both access and refresh tokens are httpOnly cookies only — response body contains user object only |
+| Rule                                     | Detail                                                                                             |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Email verification is mandatory          | Unverified users get `EMAIL_NOT_VERIFIED` 403 on login — client starts verification flow           |
+| Unverified login triggers resend flow    | Client redirects to "check your inbox" screen with resend button                                   |
+| OAuth users are auto-verified            | Google and LinkedIn pre-verify emails — no verification email sent                                 |
+| Role selection is required               | OAuth and email users must complete onboarding before dashboard access                             |
+| Employers must supply company name       | Required field during onboarding, not optional                                                     |
+| Candidates must select a role track      | Required to enter the assessment pipeline                                                          |
+| Password reset revokes all sessions      | All refresh tokens for the user are revoked on reset                                               |
+| Admin accounts are not self-registerable | Provisioned directly or via internal endpoint                                                      |
+| Auto-link on OAuth conflict              | If OAuth email matches existing account, accounts are silently linked via `user_oauth_accounts`    |
+| Tokens never in response body            | Both access and refresh tokens are httpOnly cookies only — response body contains user object only |
 
 ---
 
 ## Security Requirements
 
-| Requirement                | Detail                                                                                                    |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Password hashing           | Argon, cost factor 12                                                                                     |
-| Access token storage       | `httpOnly`, `Secure`, `SameSite=Strict` cookie — 15min TTL                                                |
-| Refresh token storage      | `httpOnly`, `Secure`, `SameSite=Strict` cookie — 7 days TTL                                               |
-| Token rotation             | Refresh tokens rotate on every use — old token immediately revoked                                         |
-| Rate limiting              | `/auth/login`: 5 req/min per IP · `/auth/forgot-password`: 5 req/min · `/auth/resend-verification`: 3 per hour per email |
-| Email enumeration prevention | Forgot password always returns 200 regardless of email existence                                         |
-| Token TTLs                 | Access: 15min · Refresh: 7 days · Email verify: 24hr · Password reset: 1hr                               |
-| HTTPS only                 | All auth endpoints require TLS in production                                                              |
-| CORS credentials           | `credentials: true` required on backend — mobile uses `withCredentials: true` on Axios                    |
+| Requirement                  | Detail                                                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Password hashing             | Argon, cost factor 12                                                                                                    |
+| Access token storage         | `httpOnly`, `Secure`, `SameSite=Strict` cookie — 15min TTL                                                               |
+| Refresh token storage        | `httpOnly`, `Secure`, `SameSite=Strict` cookie — 7 days TTL                                                              |
+| Token rotation               | Refresh tokens rotate on every use — old token immediately revoked                                                       |
+| Rate limiting                | `/auth/login`: 5 req/min per IP · `/auth/forgot-password`: 5 req/min · `/auth/resend-verification`: 3 per hour per email |
+| Email enumeration prevention | Forgot password always returns 200 regardless of email existence                                                         |
+| Token TTLs                   | Access: 15min · Refresh: 7 days · Email verification OTP: 15min (`VERIFICATION_OTP_EXPIRES_IN`) · Password reset: 1hr    |
+| HTTPS only                   | All auth endpoints require TLS in production                                                                             |
+| CORS credentials             | `credentials: true` required on backend — mobile uses `withCredentials: true` on Axios                                   |
 
 ---
 

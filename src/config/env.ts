@@ -61,6 +61,8 @@ export const env = createEnv({
     DATABASE_SSL: booleanString.default(false),
     DATABASE_SSL_CA: z.string().optional(),
 
+    REDIS_URL: z.string().url().optional(),
+
     JWT_ACCESS_SECRET: z
       .string()
       .min(32, 'JWT_ACCESS_SECRET must be at least 32 chars'),
@@ -75,6 +77,9 @@ export const env = createEnv({
       .int()
       .positive()
       .default(3),
+
+    PASSWORD_RESET_EXPIRES_IN: durationString('1h'),
+    PASSWORD_RESET_WEB_BASE_URL: z.string().url().optional(),
 
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
     SWAGGER_ENABLED: booleanString.default(true),
@@ -121,6 +126,7 @@ linkedInOAuthEnvTrioSchema.parse({
  * ESLint safe
  */
 export const linkedInHttpTimeoutMs: number = env.LINKEDIN_HTTP_TIMEOUT_MS;
-export const linkedInHttpMaxBodyBytes: number = env.LINKEDIN_HTTP_MAX_BODY_BYTES;
+export const linkedInHttpMaxBodyBytes: number =
+  env.LINKEDIN_HTTP_MAX_BODY_BYTES;
 
 export type Env = typeof env;

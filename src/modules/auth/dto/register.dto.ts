@@ -1,19 +1,11 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
-import {
-  IsIn,
-  IsString,
-  Matches,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
+import { IsIn, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { CreateUserDto } from '../../users/dto/create-user.dto';
 import { UserRole } from '../../users/entities/user.entity';
 
 class RegisterBaseDto extends PickType(CreateUserDto, [
   'email',
-  'country',
   'password',
-  'profile_pic_url',
 ] as const) {}
 
 export class RegisterDto extends RegisterBaseDto {
@@ -31,9 +23,9 @@ export class RegisterDto extends RegisterBaseDto {
   @Matches(/\S/, { message: 'lastName must not be empty' })
   lastName: string;
 
-  @ApiProperty({ enum: [UserRole.CANDIDATE, UserRole.EMPLOYER] })
-  @IsIn([UserRole.CANDIDATE, UserRole.EMPLOYER], {
-    message: 'role must be either candidate or employer',
+  @ApiProperty({ enum: [UserRole.TALENT, UserRole.EMPLOYER] })
+  @IsIn([UserRole.TALENT, UserRole.EMPLOYER], {
+    message: 'role must be either talent or employer',
   })
-  role: UserRole.CANDIDATE | UserRole.EMPLOYER;
+  role: UserRole.TALENT | UserRole.EMPLOYER;
 }

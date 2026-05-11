@@ -1,3 +1,4 @@
+import { UserRole } from './entities/user.entity';
 import type { User } from './entities/user.entity';
 
 /** Payload for transactional create of a verified user + OAuth link. */
@@ -9,6 +10,7 @@ export type CreateVerifiedUserWithOauthLinkParams = {
   avatar_url: string | null;
   provider: string;
   providerId: string;
+  role: UserRole.TALENT | UserRole.EMPLOYER;
 };
 
 /**

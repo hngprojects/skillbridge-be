@@ -10,7 +10,12 @@ import type {
   UserOauthProvisioning,
 } from './user-oauth-provisioning.types';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  QueryFailedError,
+  Repository,
+} from 'typeorm';
 import { UserModelAction } from './actions/user.action';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PaginationDto } from './dto/pagination.dto';
@@ -18,6 +23,8 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { User, UserRole } from './entities/user.entity';
 import { OAuthUserModelAction } from './actions/user-oauth.action';
 import { OAuthUser } from './entities/user-oauth.entity';
+import type { OAuthSignupRole } from '../auth/oauth-signup-role';
+import { OAuthSignupRoleRequiredException } from '../auth/exceptions/oauth-signup-role-required.exception';
 
 const NO_TRANSACTION = {
   transactionOptions: { useTransaction: false as const },
@@ -39,7 +46,7 @@ export type OAuthProviderProfileInput = {
   avatarUrl: string | null;
 };
 
-const OAUTH_DEFAULT_COUNTRY = 'Unknown';
+export const OAUTH_DEFAULT_COUNTRY = 'Unknown';
 
 @Injectable()
 export class UsersService {
@@ -69,7 +76,7 @@ export class UsersService {
         avatar_url: dto.profile_pic_url ?? null,
         is_verified: false,
         onboarding_complete: false,
-        role: dto.role ?? UserRole.CANDIDATE,
+        role: dto.role ?? UserRole.TALENT,
       },
     });
   }
@@ -156,6 +163,26 @@ export class UsersService {
     return this.findOne(id);
   }
 
+  async getUserForOnboarding(
+    manager: EntityManager,
+    id: string,
+  ): Promise<User> {
+    const user = await manager.findOne(User, {
+      where: { id },
+    });
+    if (!user) {
+      throw new NotFoundException(`User ${id} not found`);
+    }
+    return user;
+  }
+
+  async markOnboardingCompleteWithManager(
+    manager: EntityManager,
+    id: string,
+  ): Promise<void> {
+    await manager.update(User, { id }, { onboarding_complete: true });
+  }
+
   rotateRefreshTokenHash(
     id: string,
     currentHash: string,
@@ -227,6 +254,7 @@ export class UsersService {
   async resolveOAuthUserFromProviderProfile(
     provider: string,
     profile: OAuthProviderProfileInput,
+    signupRole?: OAuthSignupRole,
   ): Promise<User> {
     const linked = await this.findOauthAccountWithUser(
       provider,
@@ -250,6 +278,9 @@ export class UsersService {
     }
 
     try {
+      if (!signupRole) {
+        throw new OAuthSignupRoleRequiredException();
+      }
       return await this.createVerifiedUserWithOauthLink({
         email: profile.email,
         first_name: profile.firstName,
@@ -258,6 +289,7 @@ export class UsersService {
         avatar_url: profile.avatarUrl,
         provider,
         providerId: profile.providerId,
+        role: signupRole,
       });
     } catch (err) {
       if (!isPostgresUniqueViolation(err)) {

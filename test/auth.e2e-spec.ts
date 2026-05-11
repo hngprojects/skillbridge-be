@@ -8,7 +8,9 @@ import {
 import { JwtModule } from '@nestjs/jwt';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PassportModule } from '@nestjs/passport';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -19,9 +21,15 @@ import { env } from '../src/config/env';
 import { AuthController } from '../src/modules/auth/auth.controller';
 import {
   ACCESS_TOKEN_COOKIE,
+  OAUTH_SIGNUP_ROLE_COOKIE,
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
-import { AuthService } from '../src/modules/auth/auth.service';
+import {
+  AuthService,
+  FORGOT_PASSWORD_SUCCESS_MESSAGE,
+} from '../src/modules/auth/auth.service';
+import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
+import { PasswordResetDeliveryService } from '../src/modules/auth/password-reset-delivery.service';
 import { GoogleOAuthGuard } from '../src/modules/auth/guards/google-auth.guard';
 import type { GoogleProfile } from '../src/modules/auth/strategies/google.strategy';
 import { OAuthUser } from '../src/modules/users/entities/user-oauth.entity';
@@ -32,7 +40,9 @@ import {
   IssuedVerificationOtp,
   VerificationOtpService,
 } from '../src/modules/auth/verification-otp.service';
+import { PasswordResetQueueService } from '../src/modules/auth/password-reset-queue.service';
 import { MailService } from '../src/modules/mail/mail.service';
+import { OAuthSignupRoleRequiredException } from '../src/modules/auth/exceptions/oauth-signup-role-required.exception';
 import { CreateUserDto } from '../src/modules/users/dto/create-user.dto';
 import { UpdateUserDto } from '../src/modules/users/dto/update-user.dto';
 import { User, UserRole } from '../src/modules/users/entities/user.entity';
@@ -42,9 +52,8 @@ type RegisterPayload = {
   firstName: string;
   lastName: string;
   email: string;
-  country: string;
   password: string;
-  role: UserRole.CANDIDATE | UserRole.EMPLOYER;
+  role: UserRole.TALENT | UserRole.EMPLOYER;
 };
 
 type LoginPayload = {
@@ -65,9 +74,8 @@ const registerPayload: RegisterPayload = {
   firstName: 'Jane',
   lastName: 'Doe',
   email: 'jane@example.com',
-  country: 'Nigeria',
   password: 'StrongPass123',
-  role: UserRole.CANDIDATE,
+  role: UserRole.TALENT,
 };
 
 const loginPayload: LoginPayload = {
@@ -95,7 +103,7 @@ class InMemoryUsersService {
       avatar_url: dto.profile_pic_url ?? null,
       is_verified: false,
       onboarding_complete: false,
-      role: dto.role ?? UserRole.CANDIDATE,
+      role: dto.role ?? UserRole.TALENT,
       refreshTokenHash: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -194,6 +202,7 @@ class InMemoryUsersService {
     avatar_url: string | null;
     provider: string;
     providerId: string;
+    role: UserRole.TALENT | UserRole.EMPLOYER;
   }): Promise<User> {
     const result = await this.createOAuthUser(
       params.provider,
@@ -203,6 +212,7 @@ class InMemoryUsersService {
       params.email,
       'Unknown',
       params.avatar_url,
+      params.role,
     );
     return result.user;
   }
@@ -215,6 +225,7 @@ class InMemoryUsersService {
     email: string,
     country: 'Unknown',
     avatar_url?: string | null,
+    role: UserRole = UserRole.TALENT,
   ): Promise<{ user: User; oauthUser: OAuthUser }> {
     const user = Object.assign(new User(), {
       id: `user-${this.nextId++}`,
@@ -226,7 +237,7 @@ class InMemoryUsersService {
       avatar_url: avatar_url ?? null,
       is_verified: true,
       onboarding_complete: false,
-      role: UserRole.CANDIDATE,
+      role,
       refreshTokenHash: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -254,9 +265,13 @@ class InMemoryUsersService {
       lastName: string;
       avatarUrl: string | null;
     },
+    signupRole?: UserRole.TALENT | UserRole.EMPLOYER,
   ): Promise<User> {
     // Check if OAuth account already exists
-    const linked = await this.findOauthAccountWithUser(provider, profile.providerId);
+    const linked = await this.findOauthAccountWithUser(
+      provider,
+      profile.providerId,
+    );
     if (linked) {
       return linked.user;
     }
@@ -268,11 +283,18 @@ class InMemoryUsersService {
       if (!byEmail.is_verified) {
         await this.markVerified(byEmail.id);
       }
-      await this.linkOauthAccountToUser(byEmail.id, provider, profile.providerId);
+      await this.linkOauthAccountToUser(
+        byEmail.id,
+        provider,
+        profile.providerId,
+      );
       return this.findOne(byEmail.id);
     }
 
     // Create new user with OAuth link
+    if (!signupRole) {
+      throw new OAuthSignupRoleRequiredException();
+    }
     return await this.createVerifiedUserWithOauthLink({
       email: profile.email,
       first_name: profile.firstName,
@@ -281,6 +303,7 @@ class InMemoryUsersService {
       avatar_url: profile.avatarUrl,
       provider,
       providerId: profile.providerId,
+      role: signupRole,
     });
   }
 }
@@ -373,6 +396,13 @@ class MockMailService {
     expiresAt: Date;
   }> = [];
 
+  readonly passwordResetMessages: Array<{
+    to: string;
+    token: string;
+    expiresAt: Date;
+    resetLink?: string;
+  }> = [];
+
   async sendVerificationOtp(params: {
     to: string;
     otp: string;
@@ -380,6 +410,16 @@ class MockMailService {
   }) {
     this.verificationMessages.push(params);
     return { id: `mail-${this.verificationMessages.length}` };
+  }
+
+  async sendPasswordReset(params: {
+    to: string;
+    token: string;
+    expiresAt: Date;
+    resetLink?: string;
+  }) {
+    this.passwordResetMessages.push(params);
+    return { id: `reset-mail-${this.passwordResetMessages.length}` };
   }
 }
 
@@ -394,6 +434,9 @@ const findCookie = (cookies: string[], name: string): string =>
 
 const cookiePair = (cookie: string): string => cookie.split(';')[0];
 
+/** Auth e2e uses isolated module; force inline queue so awaitIdleForTests() waits for work. */
+const savedRedisUrlForAuthE2e = env.REDIS_URL;
+
 const expectAuthCookies = (response: Response): string => {
   const cookies = getSetCookies(response);
   const accessCookie = findCookie(cookies, ACCESS_TOKEN_COOKIE);
@@ -407,21 +450,84 @@ const expectAuthCookies = (response: Response): string => {
   return cookies.map(cookiePair).join('; ');
 };
 
+const mockPasswordResetSave = jest.fn().mockResolvedValue(undefined);
+const mockPasswordResetInvalidateExecute = jest.fn().mockResolvedValue({
+  affected: 0,
+});
+
+const mockPasswordResetTokenRepository = {
+  create: jest.fn((row: unknown) => row),
+  save: mockPasswordResetSave,
+  findOne: jest.fn().mockResolvedValue(null),
+  createQueryBuilder: jest.fn(() => ({
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    execute: mockPasswordResetInvalidateExecute,
+  })),
+  manager: {
+    transaction: jest.fn(
+      async (
+        fn: (m: {
+          createQueryBuilder: () => {
+            update: jest.Mock;
+            set: jest.Mock;
+            where: jest.Mock;
+            andWhere: jest.Mock;
+            execute: jest.Mock;
+          };
+          findOne: jest.Mock;
+          create: jest.Mock;
+          save: jest.Mock;
+        }) => Promise<void>,
+      ) => {
+        const qb = {
+          update: jest.fn().mockReturnThis(),
+          set: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          execute: mockPasswordResetInvalidateExecute,
+        };
+        await fn({
+          createQueryBuilder: () => qb,
+          findOne: jest.fn(
+            async (Entity: unknown, opts?: { where?: { id?: string } }) => {
+              if (Entity === User && opts?.where?.id) {
+                return { id: opts.where.id };
+              }
+              return null;
+            },
+          ),
+          create: jest.fn((_entity: unknown, row: unknown) => row),
+          save: mockPasswordResetSave,
+        });
+      },
+    ),
+  },
+};
+
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
   let usersService: InMemoryUsersService;
   let verificationOtpService: InMemoryVerificationOtpService;
   let mailService: MockMailService;
+  let passwordResetQueue: PasswordResetQueueService;
 
   beforeEach(async () => {
+    jest.replaceProperty(env, 'REDIS_URL', undefined);
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
+        ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
         PassportModule.register({ defaultStrategy: 'jwt' }),
         JwtModule.register({ secret: env.JWT_ACCESS_SECRET }),
       ],
       controllers: [AuthController],
       providers: [
         AuthService,
+        PasswordResetDeliveryService,
+        PasswordResetQueueService,
         JwtStrategy,
         { provide: UsersService, useClass: InMemoryUsersService },
         {
@@ -429,6 +535,10 @@ describe('Auth (e2e)', () => {
           useClass: InMemoryVerificationOtpService,
         },
         { provide: MailService, useClass: MockMailService },
+        {
+          provide: getRepositoryToken(PasswordResetToken),
+          useValue: mockPasswordResetTokenRepository,
+        },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
         { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
@@ -449,10 +559,17 @@ describe('Auth (e2e)', () => {
     usersService = moduleFixture.get(UsersService);
     verificationOtpService = moduleFixture.get(VerificationOtpService);
     mailService = moduleFixture.get(MailService);
+    passwordResetQueue = moduleFixture.get(PasswordResetQueueService);
+    jest.clearAllMocks();
   });
 
   afterEach(async () => {
     if (app) await app.close();
+    if (savedRedisUrlForAuthE2e !== undefined) {
+      jest.replaceProperty(env, 'REDIS_URL', savedRedisUrlForAuthE2e);
+    } else {
+      jest.replaceProperty(env, 'REDIS_URL', undefined);
+    }
   });
 
   it('POST /auth/register creates an unverified user and sends an OTP without cookies', async () => {
@@ -472,6 +589,118 @@ describe('Auth (e2e)', () => {
     expect(createdUser?.role).toBe(registerPayload.role);
     expect(mailService.verificationMessages).toHaveLength(1);
     expect(mailService.verificationMessages[0]?.to).toBe(registerPayload.email);
+  });
+
+  it('POST /auth/forgot-password returns same 200 payload for unknown email and does not send mail', async () => {
+    const body = { email: 'missing@example.com' };
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send(body)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      status: 'success',
+      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+    });
+    expect(mailService.passwordResetMessages).toHaveLength(0);
+    expect(mockPasswordResetTokenRepository.save).not.toHaveBeenCalled();
+    expect(mockPasswordResetInvalidateExecute).not.toHaveBeenCalled();
+  });
+
+  it('POST /auth/forgot-password for existing user triggers token save and sends reset mail', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: registerPayload.email })
+      .expect(200);
+
+    await passwordResetQueue.awaitIdleForTests();
+
+    expect(response.body).toMatchObject({
+      status: 'success',
+      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+    });
+    expect(mockPasswordResetInvalidateExecute).toHaveBeenCalled();
+    expect(mockPasswordResetTokenRepository.save).toHaveBeenCalled();
+    expect(mailService.passwordResetMessages).toHaveLength(1);
+    expect(mailService.passwordResetMessages[0]?.to).toBe(
+      registerPayload.email,
+    );
+    expect(mailService.passwordResetMessages[0]?.token?.length).toBeGreaterThan(
+      10,
+    );
+  });
+
+  it('POST /auth/forgot-password sets reset link with fragment token when PASSWORD_RESET_WEB_BASE_URL is set', async () => {
+    jest.replaceProperty(
+      env,
+      'PASSWORD_RESET_WEB_BASE_URL',
+      'https://example.com/reset',
+    );
+    try {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send(registerPayload)
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email: registerPayload.email })
+        .expect(200);
+
+      await passwordResetQueue.awaitIdleForTests();
+
+      const link = mailService.passwordResetMessages[0]?.resetLink;
+      expect(link).toBeDefined();
+      expect(link).toMatch(/^https:\/\/example\.com\/reset#token=/);
+    } finally {
+      jest.replaceProperty(env, 'PASSWORD_RESET_WEB_BASE_URL', undefined);
+    }
+  });
+
+  it('POST /auth/forgot-password returns 429 after 5 requests in the same minute from the same client', async () => {
+    const body = { email: 'nobody-for-rate-limit@example.com' };
+    for (let i = 0; i < 5; i++) {
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send(body)
+        .expect(200);
+    }
+    const sixth = await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send(body)
+      .expect(429);
+
+    expect(sixth.body).toMatchObject({
+      success: false,
+      status_code: 429,
+    });
+  });
+
+  it('POST /auth/reset-password returns 400 when passwords do not match', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({
+        token: 'dummy-token',
+        password: 'StrongPass123',
+        confirmPassword: 'OtherPass999',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      success: false,
+      status_code: 400,
+    });
+    const msg = response.body.message;
+    const messages = Array.isArray(msg) ? msg : [msg];
+    expect(messages).toEqual(
+      expect.arrayContaining(['Passwords do not match']),
+    );
   });
 
   it('POST /auth/register persists the selected employer role', async () => {
@@ -553,7 +782,7 @@ describe('Auth (e2e)', () => {
         first_name: registerPayload.firstName,
         last_name: registerPayload.lastName,
         fullname: `${registerPayload.firstName} ${registerPayload.lastName}`,
-        country: registerPayload.country,
+        country: 'Unknown',
         role: registerPayload.role,
         is_verified: true,
         onboardingComplete: false,
@@ -760,6 +989,7 @@ describe('Google OAuth callback (e2e)', () => {
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
+        ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
         PassportModule.register({ defaultStrategy: 'jwt' }),
         JwtModule.register({ secret: env.JWT_ACCESS_SECRET }),
       ],
@@ -773,6 +1003,19 @@ describe('Google OAuth callback (e2e)', () => {
           useClass: InMemoryVerificationOtpService,
         },
         { provide: MailService, useClass: MockMailService },
+        {
+          provide: getRepositoryToken(PasswordResetToken),
+          useValue: mockPasswordResetTokenRepository,
+        },
+        {
+          provide: PasswordResetQueueService,
+          useValue: {
+            enqueue: jest.fn(),
+            awaitIdleForTests: jest.fn().mockResolvedValue(undefined),
+            onModuleDestroy: jest.fn(),
+            onModuleInit: jest.fn(),
+          },
+        },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
         { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
@@ -816,6 +1059,7 @@ describe('Google OAuth callback (e2e)', () => {
       .get('/auth/google/callback')
       .expect(302);
 
+    expect(response.headers['location']).toContain(env.FRONTEND_URL);
     expect(response.headers['location']).toContain('/onboarding');
     const cookies = getSetCookies(response);
     expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
@@ -836,6 +1080,7 @@ describe('Google OAuth callback (e2e)', () => {
       .get('/auth/google/callback')
       .expect(302);
 
+    expect(response.headers['location']).toContain(env.FRONTEND_URL);
     expect(response.headers['location']).toContain('/onboarding');
     const cookies = getSetCookies(response);
     expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
@@ -850,9 +1095,11 @@ describe('Google OAuth callback (e2e)', () => {
   it('GET /auth/google/callback creates a brand-new user on first login', async () => {
     const response = await request(app.getHttpServer())
       .get('/auth/google/callback')
+      .set('Cookie', `${OAUTH_SIGNUP_ROLE_COOKIE}=employer`)
       .expect(302);
 
-    expect(response.headers['location']).toContain('/onboarding');
+    expect(response.headers['location']).toContain(env.FRONTEND_URL);
+    expect(response.headers['location']).toContain('/employer/onboarding');
     const cookies = getSetCookies(response);
     expect(cookies.some((c) => c.startsWith(ACCESS_TOKEN_COOKIE))).toBe(true);
 
@@ -860,5 +1107,19 @@ describe('Google OAuth callback (e2e)', () => {
     expect(newUser).not.toBeNull();
     expect(newUser?.is_verified).toBe(true);
     expect(newUser?.first_name).toBe(googleProfile.firstName);
+    expect(newUser?.role).toBe(UserRole.EMPLOYER);
+  });
+
+  it('GET /auth/google/callback redirects with oauth_role_required for brand-new users without role context', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/auth/google/callback')
+      .expect(302);
+
+    expect(response.headers['location']).toBe(
+      `${env.FRONTEND_URL}/login?error=oauth_role_required`,
+    );
+
+    const newUser = await usersService.findByEmail(googleProfile.email);
+    expect(newUser).toBeNull();
   });
 });

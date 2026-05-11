@@ -8,8 +8,9 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PassportModule } from '@nestjs/passport';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import type { StringValue } from 'ms';
 import request from 'supertest';
-import { App, Response } from 'supertest/types';
+import { App } from 'supertest/types';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor';
 import { env } from '../src/config/env';
@@ -27,6 +28,8 @@ import {
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
+import { PasswordResetQueueService } from '../src/modules/auth/password-reset-queue.service';
 import { VerificationOtpService } from '../src/modules/auth/verification-otp.service';
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../src/modules/auth/guards/roles.guard';
@@ -35,7 +38,7 @@ import { MailService } from '../src/modules/mail/mail.service';
 import { User, UserRole } from '../src/modules/users/entities/user.entity';
 import { UsersService } from '../src/modules/users/users.service';
 
-type CandidateUser = User & { role: UserRole.CANDIDATE };
+type CandidateUser = User & { role: UserRole.TALENT };
 type EmployerUser = User & { role: UserRole.EMPLOYER };
 
 class InMemoryUsersService {
@@ -48,7 +51,7 @@ class InMemoryUsersService {
       first_name: 'Casey',
       last_name: 'Candidate',
       country: 'Nigeria',
-      role: UserRole.CANDIDATE,
+      role: UserRole.TALENT,
     });
     this.seedUser({
       id: 'employer-user',
@@ -100,6 +103,17 @@ class InMemoryUsersService {
     return user;
   }
 
+  async getUserForOnboarding(_manager: unknown, id: string): Promise<User> {
+    return this.findOne(id);
+  }
+
+  async markOnboardingCompleteWithManager(
+    _manager: unknown,
+    id: string,
+  ): Promise<void> {
+    await this.markOnboardingComplete(id);
+  }
+
   async setRefreshTokenHash(id: string, hash: string | null): Promise<void> {
     const user = await this.findOne(id);
     user.refreshTokenHash = hash;
@@ -109,6 +123,71 @@ class InMemoryUsersService {
 class InMemoryCandidateProfileRepository {
   private readonly profiles = new Map<string, CandidateProfile>();
   private nextId = 1;
+  readonly manager: {
+    transaction: <T>(
+      callback: (manager: {
+        findOne: <Entity>(
+          entity: new () => Entity,
+          options: { where: { id?: string; user_id?: string } },
+        ) => Promise<Entity | null>;
+        create: <Entity>(
+          entity: new () => Entity,
+          payload: Partial<Entity>,
+        ) => Entity;
+        save: <Entity>(
+          entity: new () => Entity,
+          payload: Entity,
+        ) => Promise<Entity>;
+        update: <Entity>(
+          entity: new () => Entity,
+          criteria: { id: string },
+          partial: Partial<Entity>,
+        ) => Promise<void>;
+      }) => Promise<T>,
+    ) => Promise<T>;
+  };
+
+  constructor(private readonly usersService: InMemoryUsersService) {
+    this.manager = {
+      transaction: async (callback) =>
+        callback({
+          findOne: async <Entity>(
+            entity: new () => Entity,
+            options: { where: { id?: string; user_id?: string } },
+          ): Promise<Entity | null> => {
+            if (entity === (User as unknown as new () => Entity)) {
+              const id = options.where.id;
+              return id
+                ? ((await this.usersService.findOneOrNull(id)) as Entity | null)
+                : null;
+            }
+            const userId = options.where.user_id;
+            return userId
+              ? ((this.profiles.get(userId) ?? null) as Entity | null)
+              : null;
+          },
+          create: <Entity>(
+            _entity: new () => Entity,
+            payload: Partial<Entity>,
+          ): Entity => Object.assign(new CandidateProfile(), payload) as Entity,
+          save: async <Entity>(
+            _entity: new () => Entity,
+            payload: Entity,
+          ): Promise<Entity> =>
+            this.save(payload as CandidateProfile) as Promise<Entity>,
+          update: async <Entity>(
+            entity: new () => Entity,
+            criteria: { id: string },
+            partial: Partial<Entity>,
+          ): Promise<void> => {
+            if (entity === (User as unknown as new () => Entity)) {
+              const user = await this.usersService.findOne(criteria.id);
+              Object.assign(user, partial);
+            }
+          },
+        }),
+    };
+  }
 
   create(payload: Partial<CandidateProfile>): CandidateProfile {
     return Object.assign(new CandidateProfile(), payload);
@@ -136,6 +215,71 @@ class InMemoryCandidateProfileRepository {
 class InMemoryEmployerProfileRepository {
   private readonly profiles = new Map<string, EmployerProfile>();
   private nextId = 1;
+  readonly manager: {
+    transaction: <T>(
+      callback: (manager: {
+        findOne: <Entity>(
+          entity: new () => Entity,
+          options: { where: { id?: string; user_id?: string } },
+        ) => Promise<Entity | null>;
+        create: <Entity>(
+          entity: new () => Entity,
+          payload: Partial<Entity>,
+        ) => Entity;
+        save: <Entity>(
+          entity: new () => Entity,
+          payload: Entity,
+        ) => Promise<Entity>;
+        update: <Entity>(
+          entity: new () => Entity,
+          criteria: { id: string },
+          partial: Partial<Entity>,
+        ) => Promise<void>;
+      }) => Promise<T>,
+    ) => Promise<T>;
+  };
+
+  constructor(private readonly usersService: InMemoryUsersService) {
+    this.manager = {
+      transaction: async (callback) =>
+        callback({
+          findOne: async <Entity>(
+            entity: new () => Entity,
+            options: { where: { id?: string; user_id?: string } },
+          ): Promise<Entity | null> => {
+            if (entity === (User as unknown as new () => Entity)) {
+              const id = options.where.id;
+              return id
+                ? ((await this.usersService.findOneOrNull(id)) as Entity | null)
+                : null;
+            }
+            const userId = options.where.user_id;
+            return userId
+              ? ((this.profiles.get(userId) ?? null) as Entity | null)
+              : null;
+          },
+          create: <Entity>(
+            _entity: new () => Entity,
+            payload: Partial<Entity>,
+          ): Entity => Object.assign(new EmployerProfile(), payload) as Entity,
+          save: async <Entity>(
+            _entity: new () => Entity,
+            payload: Entity,
+          ): Promise<Entity> =>
+            this.save(payload as EmployerProfile) as Promise<Entity>,
+          update: async <Entity>(
+            entity: new () => Entity,
+            criteria: { id: string },
+            partial: Partial<Entity>,
+          ): Promise<void> => {
+            if (entity === (User as unknown as new () => Entity)) {
+              const user = await this.usersService.findOne(criteria.id);
+              Object.assign(user, partial);
+            }
+          },
+        }),
+    };
+  }
 
   create(payload: Partial<EmployerProfile>): EmployerProfile {
     return Object.assign(new EmployerProfile(), payload);
@@ -164,7 +308,9 @@ class StubVerificationOtpService {}
 
 class StubMailService {}
 
-const getSetCookies = (response: Response): string[] => {
+const getSetCookies = (response: {
+  headers: Record<string, string | string[] | undefined>;
+}): string[] => {
   const header = response.headers['set-cookie'];
   if (Array.isArray(header)) {
     return header;
@@ -188,7 +334,7 @@ const accessCookieHeaderFor = async (
     },
     {
       secret: env.JWT_ACCESS_SECRET,
-      expiresIn: env.JWT_ACCESS_EXPIRES_IN,
+      expiresIn: env.JWT_ACCESS_EXPIRES_IN as StringValue,
     },
   );
 
@@ -215,14 +361,41 @@ describe('Onboarding (e2e)', () => {
         { provide: UsersService, useClass: InMemoryUsersService },
         {
           provide: getRepositoryToken(CandidateProfile),
-          useClass: InMemoryCandidateProfileRepository,
+          useFactory: (inMemoryUsersService: InMemoryUsersService) =>
+            new InMemoryCandidateProfileRepository(inMemoryUsersService),
+          inject: [UsersService],
         },
         {
           provide: getRepositoryToken(EmployerProfile),
-          useClass: InMemoryEmployerProfileRepository,
+          useFactory: (inMemoryUsersService: InMemoryUsersService) =>
+            new InMemoryEmployerProfileRepository(inMemoryUsersService),
+          inject: [UsersService],
         },
-        { provide: VerificationOtpService, useClass: StubVerificationOtpService },
+        {
+          provide: VerificationOtpService,
+          useClass: StubVerificationOtpService,
+        },
         { provide: MailService, useClass: StubMailService },
+        {
+          provide: getRepositoryToken(PasswordResetToken),
+          useValue: {
+            manager: {
+              transaction: jest.fn(
+                async (_fn: (m: unknown) => Promise<void>) => undefined,
+              ),
+            },
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: PasswordResetQueueService,
+          useValue: {
+            enqueue: jest.fn(),
+            awaitIdleForTests: jest.fn().mockResolvedValue(undefined),
+            onModuleDestroy: jest.fn(),
+            onModuleInit: jest.fn(),
+          },
+        },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_GUARD, useClass: RolesGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
@@ -246,11 +419,13 @@ describe('Onboarding (e2e)', () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    if (app) await app.close();
   });
 
   it('POST /candidate/onboarding completes candidate onboarding and reissues auth cookies', async () => {
-    const user = (await usersService.findOne('candidate-user')) as CandidateUser;
+    const user = (await usersService.findOne(
+      'candidate-user',
+    )) as CandidateUser;
     const cookieHeader = await accessCookieHeaderFor(jwtService, user);
 
     const response = await request(app.getHttpServer())
@@ -269,7 +444,7 @@ describe('Onboarding (e2e)', () => {
       status_code: 200,
       message: 'Candidate onboarding completed',
       user: {
-        role: UserRole.CANDIDATE,
+        role: UserRole.TALENT,
         onboardingComplete: true,
       },
       profile: {
@@ -284,7 +459,9 @@ describe('Onboarding (e2e)', () => {
   });
 
   it('POST /candidate/onboarding rejects repeated completion', async () => {
-    const user = (await usersService.findOne('candidate-user')) as CandidateUser;
+    const user = (await usersService.findOne(
+      'candidate-user',
+    )) as CandidateUser;
     const cookieHeader = await accessCookieHeaderFor(jwtService, user);
 
     await request(app.getHttpServer())
@@ -295,7 +472,7 @@ describe('Onboarding (e2e)', () => {
 
     const secondAccessCookie = await accessCookieHeaderFor(
       jwtService,
-      (await usersService.findOne(user.id)),
+      await usersService.findOne(user.id),
     );
 
     await request(app.getHttpServer())
