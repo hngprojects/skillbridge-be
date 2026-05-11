@@ -168,6 +168,14 @@ export class UsersService {
     return this.findOne(id);
   }
 
+  async updateAvatar(id: string, avatarUrl: string): Promise<void> {
+    await this.userModelAction.update({
+      ...NO_TRANSACTION,
+      identifierOptions: { id },
+      updatePayload: { avatar_url: avatarUrl },
+    });
+  }
+
   async markOnboardingComplete(id: string): Promise<User> {
     await this.userModelAction.update({
       ...NO_TRANSACTION,
