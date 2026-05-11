@@ -14,7 +14,9 @@ export const dataSourceOptions: DataSourceOptions = {
   synchronize: false,
   logging: env.DATABASE_LOGGING,
   ssl: env.DATABASE_SSL
-    ? { ca: env.DATABASE_SSL_CA, rejectUnauthorized: true }
+    ? env.DATABASE_SSL_CA
+      ? { ca: env.DATABASE_SSL_CA, rejectUnauthorized: true }
+      : { rejectUnauthorized: false }
     : false,
 };
 

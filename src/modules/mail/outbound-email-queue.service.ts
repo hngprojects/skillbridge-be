@@ -4,7 +4,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { Queue, Worker } from 'bullmq';
+import { Job, Queue, Worker } from 'bullmq';
 import { Resend } from 'resend';
 import { z } from 'zod';
 import { env } from '../../config/env';
@@ -41,7 +41,7 @@ export class OutboundEmailQueueService
     this.queue = new Queue(QUEUE_NAME, { connection: conn });
     this.worker = new Worker(
       QUEUE_NAME,
-      async (job) => {
+      async (job: Job) => {
         if (job.name !== 'password-reset') {
           throw new Error(`Unknown outbound email job: ${job.name}`);
         }
@@ -57,7 +57,7 @@ export class OutboundEmailQueueService
       },
       { connection: conn },
     );
-    this.worker.on('failed', (job, err) => {
+    this.worker.on('failed', (job: Job | undefined, err) => {
       this.logger.error(
         `Outbound email job ${job?.id} failed`,
         err instanceof Error ? err.stack : err,

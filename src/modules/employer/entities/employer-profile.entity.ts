@@ -5,11 +5,14 @@ import {
   Entity,
   Index,
   JoinColumn,
+  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { EmployerContact } from './employer-contact.entity';
+import { Shortlist } from './shortlist.entity';
 
 @Entity('employer_profiles')
 export class EmployerProfile {
@@ -49,6 +52,18 @@ export class EmployerProfile {
   @ApiProperty({ required: false, nullable: true })
   @Column({ type: 'varchar', length: 100, nullable: true })
   hiring_region: string | null;
+
+  @OneToMany(
+    () => Shortlist,
+    (shortlist: Shortlist) => shortlist.employerProfile,
+  )
+  shortlists: Shortlist[];
+
+  @OneToMany(
+    () => EmployerContact,
+    (contact: EmployerContact) => contact.employerProfile,
+  )
+  contacts: EmployerContact[];
 
   @ApiProperty()
   @CreateDateColumn({ name: 'created_at', type: 'timestamp with time zone' })

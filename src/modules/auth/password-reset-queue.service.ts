@@ -4,7 +4,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { Queue, Worker } from 'bullmq';
+import { Job, Queue, Worker } from 'bullmq';
 import { redisQueueConnection } from '../../config/redis-queue';
 import { PasswordResetDeliveryService } from './password-reset-delivery.service';
 
@@ -37,13 +37,13 @@ export class PasswordResetQueueService
     this.queue = new Queue(QUEUE_NAME, { connection: conn });
     this.worker = new Worker(
       QUEUE_NAME,
-      async (job) => {
+      async (job: Job<PasswordResetJobData>) => {
         const { userId } = job.data as PasswordResetJobData;
         await this.passwordResetDeliveryService.deliverForUser(userId);
       },
       { connection: conn },
     );
-    this.worker.on('failed', (job, err) => {
+    this.worker.on('failed', (job: Job<PasswordResetJobData> | undefined, err) => {
       this.logger.error(
         `Password reset job ${job?.id} failed`,
         err instanceof Error ? err.stack : err,
