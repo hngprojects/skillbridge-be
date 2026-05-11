@@ -9,18 +9,19 @@ import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { PasswordResetToken } from './entities/password-reset-token.entity';
+import { PasswordResetOtp } from './entities/password-reset-otp.entity';
 import { VerificationOtp } from './entities/verification-otp.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { VerificationOtpService } from './verification-otp.service';
+import { PasswordResetOtpService } from './password-reset-otp.service';
 import { PasswordResetDeliveryService } from './password-reset-delivery.service';
 import { PasswordResetQueueService } from './password-reset-queue.service';
 
 @Module({
   imports: [
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
-    TypeOrmModule.forFeature([VerificationOtp, PasswordResetToken]),
+    TypeOrmModule.forFeature([VerificationOtp, PasswordResetOtp]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: env.JWT_ACCESS_SECRET,
@@ -32,6 +33,7 @@ import { PasswordResetQueueService } from './password-reset-queue.service';
   controllers: [AuthController],
   providers: [
     AuthService,
+    PasswordResetOtpService,
     PasswordResetDeliveryService,
     PasswordResetQueueService,
     JwtStrategy,

@@ -351,23 +351,24 @@ Step 1 — Request reset
   POST /auth/forgot-password { email }
     │
     ├── ALWAYS return 200 regardless of whether email exists
-    │     { status: "success", message: "If that email exists, a reset link has been sent" }
+    │     { status: "success", message: "If that email exists, a reset code has been sent" }
     │
     └── If email found in users:
-          Generate opaque reset token (random bytes, base64url) with configured TTL
-          Store: { user_id, token_hash, expires_at, used: false }
-          Send reset token to user (out-of-band) — client submits it in JSON body to POST /auth/reset-password
+          Generate 6-digit OTP with PASSWORD_RESET_OTP_EXPIRES_IN TTL (default 15m)
+          Invalidate any existing active OTPs for this user
+          Store: { user_id, otp_hash (argon2), expires_at, used_at: null } in password_reset_otps
+          Send OTP to user via email — client submits email + OTP to POST /auth/reset-password
 
 Step 2 — Submit new password
-  POST /auth/reset-password { token, password, confirmPassword }
+  POST /auth/reset-password { email, otp, password, confirmPassword }
     │
-    ├── Look up token → not found/expired → 400 { status: "error", message: "Invalid or expired token" }
-    ├── Check used flag → already used → 400 { status: "error", message: "Token already used" }
+    ├── Look up user by email → not found → 400 { status: "error", message: "Invalid or expired OTP" }
+    ├── consume(userId, otp) → not found / expired / already used / hash mismatch
+    │     → 400 { status: "error", message: "Invalid or expired OTP" }
     ├── Validate password === confirmPassword (DTO) → mismatch → 400
     │
-    ├── Hash new password → UPDATE users SET password_hash = $hash
-    ├── Mark token as used
-    ├── REVOKE all refresh_tokens for this user (forces re-login on all devices)
+    ├── Hash new password with argon2 → UPDATE users SET password = $hash
+    ├── NULL OUT refreshTokenHash → revokes all active sessions on all devices
     │
     └── Response: 200 { status: "success", message: "Password updated. Please log in." }
 ```
@@ -701,7 +702,7 @@ Revoke current session.
 
 ### `POST /auth/forgot-password`
 
-Request a password reset link.
+Request a password reset code.
 
 **Request body:**
 
@@ -714,24 +715,25 @@ Request a password reset link.
 **Responses:**
 
 ```json
-200  { "status": "success", "message": "If that email exists, a reset link has been sent" }
+200  { "status": "success", "message": "If that email exists, a reset code has been sent" }
 ```
 
 > Always returns 200 regardless of whether the email exists (prevents enumeration).
 
-> When `REDIS_URL` is set, token issuance and password-reset email delivery run in BullMQ workers (Redis) so the handler returns without awaiting Argon2/DB/email I/O for the known-email case. Without `REDIS_URL`, the same work is scheduled on the Node event loop after the response is sent (still not awaited on the request path).
+> When `REDIS_URL` is set, OTP issuance and email delivery run in BullMQ workers so the handler returns immediately. Without `REDIS_URL`, the same work runs inline on the Node event loop after the response is sent.
 
 ---
 
 ### `POST /auth/reset-password`
 
-Set a new password using a reset token.
+Set a new password using a 6-digit OTP sent to the user's email.
 
 **Request body:**
 
 ```json
 {
-  "token": "string",
+  "email": "string",
+  "otp": "string (6 digits)",
   "password": "string",
   "confirmPassword": "string"
 }
@@ -741,12 +743,11 @@ Set a new password using a reset token.
 
 ```json
 200  { "status": "success", "message": "Password updated. Please log in." }
-400  { "status": "error", "message": "Invalid or expired token" }
-400  { "status": "error", "message": "Token already used" }
+400  { "status": "error", "message": "Invalid or expired OTP" }
 400  { "status": "error", "message": "Passwords do not match" }
 ```
 
-> All active refresh tokens for the user are revoked on success.
+> All active sessions for the user are revoked on success (refreshTokenHash is nulled out).
 
 ---
 
