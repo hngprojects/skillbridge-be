@@ -16,9 +16,9 @@ const QUEUE_NAME = 'password-reset-email';
 
 const passwordResetEmailJobSchema = z.object({
   to: z.string().min(1),
-  token: z.string().min(1),
+  otp: z.string().min(1),
+  recipientFirstName: z.string().min(1),
   expiresAt: z.union([z.date(), z.string(), z.number()]),
-  resetLink: z.string().optional(),
 });
 
 @Injectable()
@@ -108,9 +108,9 @@ export class OutboundEmailQueueService
   private async sendPasswordResetImmediate(
     params: PasswordResetEmailPayload,
   ): Promise<void> {
-    const token = params.token?.trim();
-    if (!token) {
-      throw new Error('sendPasswordReset requires a non-empty token');
+    const otp = params.otp?.trim();
+    if (!otp) {
+      throw new Error('sendPasswordReset requires a non-empty otp');
     }
 
     const expiresAt = OutboundEmailQueueService.coerceExpiresAt(
@@ -121,22 +121,30 @@ export class OutboundEmailQueueService
       Math.ceil((expiresAt.getTime() - Date.now()) / (60 * 1000)),
     );
 
-    const linkLine = params.resetLink
-      ? `Open this link to reset your password (expires in ${expiresInMinutes} minute(s).):\n${params.resetLink}\n\n`
-      : '';
-    const tokenLineText = `Your reset token: ${token}\n\n`;
-    const text = `${linkLine}${tokenLineText}This token expires in ${expiresInMinutes} minute(s). If you did not request a reset, ignore this email.`;
+    const name = params.recipientFirstName?.trim() || 'there';
+    const padded = otp.padStart(6, '0');
+    const digits = padded.split('');
+    const digitVars = Object.fromEntries(
+      digits.map((d, i) => [`digit${i + 1}`, d]),
+    ) as Record<string, string>;
 
-    const resetLinkBlock = params.resetLink
-      ? `<p style="margin:12px 0 0 0"><a href="${params.resetLink.replace(/"/g, '&quot;')}" style="color:#1f5f6b;font-weight:600;text-decoration:underline">Open password reset link</a></p>`
-      : '';
+    const base = env.FRONTEND_URL.replace(/\/$/, '');
+    const logoUrl =
+      env.EMAIL_LOGO_URL ??
+      'https://placehold.co/140x40/1f5f6b/ffffff/png?text=SkillBridge';
 
     const rawHtml = loadMailTemplateFile('password-reset.html');
     const html = substituteMailTemplate(rawHtml, {
-      token,
+      name,
       expiresMinutes: String(expiresInMinutes),
-      resetLinkBlock,
+      logoUrl,
+      supportEmail: env.SUPPORT_EMAIL,
+      unsubscribeUrl: `${base}/email-preferences`,
+      year: String(new Date().getFullYear()),
+      ...digitVars,
     });
+
+    const text = `Hi ${name},\n\nYour SkillBridge password reset code is ${padded}. It expires in ${expiresInMinutes} minute(s).\n\nIf you did not request a reset, ignore this email.`;
 
     await this.send({
       to: params.to,

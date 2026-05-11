@@ -8,8 +8,13 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
-@Entity('password_reset_tokens')
-export class PasswordResetToken {
+export enum PasswordResetOtpSource {
+  INITIAL = 'initial',
+  RESEND = 'resend',
+}
+
+@Entity('password_reset_otps')
+export class PasswordResetOtp {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -20,17 +25,8 @@ export class PasswordResetToken {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  /** SHA-256 hex of the raw token — lookup without storing plaintext */
-  @Column({
-    type: 'varchar',
-    length: 64,
-    name: 'token_lookup_hash',
-    unique: true,
-  })
-  tokenLookupHash: string;
-
-  @Column({ type: 'varchar', length: 255, name: 'token_hash' })
-  tokenHash: string;
+  @Column({ type: 'varchar', length: 255, name: 'otp_hash' })
+  otpHash: string;
 
   @Column({ type: 'timestamp with time zone', name: 'expires_at' })
   expiresAt: Date;
@@ -41,6 +37,14 @@ export class PasswordResetToken {
     nullable: true,
   })
   usedAt: Date | null;
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'request_source',
+    default: PasswordResetOtpSource.INITIAL,
+  })
+  requestSource: PasswordResetOtpSource;
 
   @CreateDateColumn({ type: 'timestamp with time zone', name: 'created_at' })
   createdAt: Date;
