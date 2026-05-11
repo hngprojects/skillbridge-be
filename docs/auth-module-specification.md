@@ -282,7 +282,7 @@ Both flows share:
 ```
 POST /auth/register
   │
-  ├── Validate request body (firstName, lastName, email, password, reasonForJoining, role)
+  ├── Validate request body (firstName, lastName, email, password, role; optional reasonForJoining)
   │     └── Fail → 422 { status: "error", message: "Validation failed", fields: [...] }
   │
   ├── Check if email already exists in users table
@@ -539,8 +539,8 @@ Register with email and password.
   "lastName": "string",
   "email": "string",
   "password": "string (min 8 chars)",
-  "reasonForJoining": "string",
-  "role": "talent | employer"
+  "role": "talent | employer",
+  "reasonForJoining": "string (optional)"
 }
 ```
 
