@@ -116,10 +116,15 @@ jobs:
             DATABASE_HOST=$(grep -E '^DATABASE_HOST=' .env | cut -d '=' -f2 | tr -d '\r')
             DATABASE_PORT=$(grep -E '^DATABASE_PORT=' .env | cut -d '=' -f2 | tr -d '\r')
             DATABASE_PASSWORD=$(grep -E '^DATABASE_PASSWORD=' .env | cut -d '=' -f2 | tr -d '\r')
-            PGPASSWORD="$DATABASE_PASSWORD" psql -h "$DATABASE_HOST" -p "${DATABASE_PORT:-5432}" -U "$DATABASE_USER" -tc \
-              "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" | grep -q 1 || \
-              PGPASSWORD="$DATABASE_PASSWORD" psql -h "$DATABASE_HOST" -p "${DATABASE_PORT:-5432}" -U "$DATABASE_USER" -c \
-              "CREATE DATABASE \"$DATABASE_NAME\";"
+            if [ -z "$DATABASE_NAME" ]; then
+              echo "FATAL: DATABASE_NAME is empty"
+              exit 1
+            fi
+
+            PGPASSWORD="$DATABASE_PASSWORD" psql -h "$DATABASE_HOST" -p "${DATABASE_PORT:-5432}" -U "$DATABASE_USER" -d postgres -v dbname="$DATABASE_NAME" -tc \
+              "SELECT 1 FROM pg_database WHERE datname = :'dbname'" | grep -q 1 || \
+              PGPASSWORD="$DATABASE_PASSWORD" psql -h "$DATABASE_HOST" -p "${DATABASE_PORT:-5432}" -U "$DATABASE_USER" -d postgres -v dbname="$DATABASE_NAME" -c \
+              'CREATE DATABASE :"dbname";'
 
             # Run database migrations
             pnpm migration:run
