@@ -112,7 +112,9 @@ export class OutboundEmailQueueService
       throw new Error('sendPasswordReset requires a non-empty token');
     }
 
-    const expiresAt = OutboundEmailQueueService.coerceExpiresAt(params.expiresAt);
+    const expiresAt = OutboundEmailQueueService.coerceExpiresAt(
+      params.expiresAt,
+    );
     const expiresInMinutes = Math.max(
       1,
       Math.ceil((expiresAt.getTime() - Date.now()) / (60 * 1000)),
