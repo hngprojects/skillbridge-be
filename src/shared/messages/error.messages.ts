@@ -29,6 +29,9 @@ export const ErrorMessages = {
     TALENT_PROFILE_EXISTS: 'Talent profile already exists',
     EMPLOYER_PROFILE_EXISTS: 'Employer profile already exists',
     CANDIDATE_PROFILE_EXISTS: 'Candidate profile already exists',
+    NO_FILE: 'No file provided',
+    INVALID_FILE_TYPE: 'Only image files are allowed (jpeg, png, webp)',
+    FILE_TOO_LARGE: 'File must be smaller than 5 MB',
   },
   COMMON: {
     INSUFFICIENT_PERMISSIONS: 'Insufficient permissions',

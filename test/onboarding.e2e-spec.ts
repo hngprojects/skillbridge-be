@@ -16,6 +16,7 @@ import { TransformInterceptor } from '../src/common/interceptors/transform.inter
 import { env } from '../src/config/env';
 import { TalentController } from '../src/modules/talent/talent.controller';
 import { TalentService } from '../src/modules/talent/talent.service';
+import { UploadService } from '../src/modules/upload/upload.service';
 import {
   TalentProfile,
   TalentProfileStatus,
@@ -400,6 +401,7 @@ describe('Onboarding (e2e)', () => {
             onModuleInit: jest.fn(),
           },
         },
+        { provide: UploadService, useValue: { uploadAvatar: jest.fn() } },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_GUARD, useClass: RolesGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
