@@ -39,7 +39,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       );
     }
 
-    if (!name?.givenName || !name?.familyName) {
+    if (!name?.givenName && !name?.familyName) {
       return done(
         new Error('Name information missing from Google OAuth profile'),
         undefined,
@@ -48,8 +48,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
 
     const user: GoogleProfile = {
       email: emails[0].value,
-      firstName: name.givenName,
-      lastName: name.familyName,
+      firstName: name.givenName || '',
+      lastName: name.familyName || '',
       picture: photos?.[0]?.value ?? '',
       providerId: profile.id,
       country: env.GOOGLE_DEFAULT_COUNTRY ?? 'Unknown',
