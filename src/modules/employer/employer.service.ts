@@ -56,12 +56,11 @@ export class EmployerService {
 
         const nextProfile = manager.create(EmployerProfile, {
           user_id: userId,
-          company_name: dto.companyName.trim(),
-          company_size: dto.companySize?.trim() || null,
-          industry: dto.industry?.trim() || null,
-          website_url: dto.websiteUrl?.trim() || null,
-          company_description: dto.companyDescription?.trim() || null,
-          hiring_region: dto.hiringRegion?.trim() || null,
+          joining_as: dto.joiningAs,
+          desired_roles: dto.desiredRoles,
+          region: dto.region.trim(),
+          hiring_count_range: dto.hiringCountRange,
+          company_website: dto.companyWebsite?.trim() || null,
         });
 
         const savedProfile = await manager.save(EmployerProfile, nextProfile);
