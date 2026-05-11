@@ -131,11 +131,19 @@ Likely future endpoints:
 
 ## Business Rules
 
+<<<<<<<< HEAD:docs/talent-domain-specification.md
 - Only users with role `talent` can access talent endpoints.
 - Talent profile should be created once, either:
   - immediately after talent signup, or
   - during talent-specific onboarding
 - A talent user cannot publish a profile before meeting the minimum readiness rule.
+========
+- Only users with role `candidate` can access candidate endpoints.
+- Candidate profile should be created once, either:
+  - immediately after candidate signup, or
+  - during role-selection onboarding
+- A candidate cannot publish a profile before meeting the minimum readiness rule.
+>>>>>>>> upstream/dev:docs/candidate-domain-specification.md
 - Readiness state should come from scored product workflows, not from client input.
 - `profile_share_link` must be stable once published unless there is an explicit regeneration feature.
 - Talent onboarding completion should be tracked separately from auth success.
