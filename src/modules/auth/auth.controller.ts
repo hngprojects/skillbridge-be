@@ -7,11 +7,9 @@ import {
   HttpStatus,
   Param,
   Post,
-  Query,
   Req,
   Res,
   UseGuards,
-  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -44,18 +42,13 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
-import { LinkedInCallbackQueryDto } from './dto/linkedin-callback-query.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { OAuthSignupRoleRequiredException } from './exceptions/oauth-signup-role-required.exception';
-
-const linkedInCallbackQueryPipe = new ValidationPipe({
-  whitelist: true,
-  forbidNonWhitelisted: true,
-  transform: true,
-  transformOptions: { enableImplicitConversion: false },
-});
 import type { GoogleProfile } from './strategies/google.strategy';
-import { isOAuthSignupRole, type OAuthSignupRole } from './oauth-signup-role';
+import {
+  normalizeOAuthSignupRole,
+  type OAuthSignupRole,
+} from './oauth-signup-role';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -63,13 +56,14 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   private parseOAuthSignupRole(role: string): OAuthSignupRole {
-    if (!isOAuthSignupRole(role)) {
+    const normalizedRole = normalizeOAuthSignupRole(role);
+    if (!normalizedRole) {
       throw new HttpException(
         'Invalid OAuth signup role',
         HttpStatus.BAD_REQUEST,
       );
     }
-    return role;
+    return normalizedRole;
   }
 
   @Public()
@@ -108,66 +102,6 @@ export class AuthController {
   })
   async resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto);
-  }
-
-  @Public()
-  @Get('linkedin')
-  @ApiOperation({
-    summary: 'Initiate LinkedIn OAuth',
-    description: 'Redirects the browser to the LinkedIn consent screen.',
-  })
-  @ApiResponse({
-    status: HttpStatus.FOUND,
-    description: 'Redirect to LinkedIn authorization',
-  })
-  @ApiResponse({
-    status: HttpStatus.SERVICE_UNAVAILABLE,
-    description: 'LinkedIn OAuth is not configured',
-  })
-  linkedIn(@Res() res: Response): void {
-    this.authService.applyLinkedInOAuthStart(res);
-  }
-
-  @Public()
-  @Get('linkedin/signup/:role')
-  @ApiOperation({
-    summary: 'Initiate LinkedIn OAuth for a specific signup path',
-    description:
-      'Redirects the browser to LinkedIn and preserves whether the user entered through the candidate or employer path.',
-  })
-  @ApiResponse({
-    status: HttpStatus.FOUND,
-    description: 'Redirect to LinkedIn authorization',
-  })
-  linkedInForRole(@Param('role') role: string, @Res() res: Response): void {
-    this.authService.applyLinkedInOAuthStart(
-      res,
-      this.parseOAuthSignupRole(role),
-    );
-  }
-
-  @Public()
-  @Get('linkedin/callback')
-  @ApiOperation({
-    summary: 'LinkedIn OAuth callback',
-    description:
-      'Exchanges the code, sets auth cookies, then redirects to the role-based onboarding or application path.',
-  })
-  @ApiResponse({
-    status: HttpStatus.FOUND,
-    description:
-      'Redirect to SPA: /candidate/onboarding or /employer/onboarding when setup is incomplete; otherwise /dashboard, /discovery, or /admin. Auth cookies set on this response.',
-  })
-  async linkedInCallback(
-    @Req() req: Request,
-    @Res() res: Response,
-    @Query(linkedInCallbackQueryPipe) query: LinkedInCallbackQueryDto,
-  ): Promise<void> {
-    await this.authService.handleLinkedInOAuthCallback(req, res, {
-      code: query.code,
-      state: query.state,
-      error: query.error,
-    });
   }
 
   @Public()
@@ -231,7 +165,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Initiate Google OAuth for a specific signup path',
     description:
-      'Redirects the browser to Google and preserves whether the user entered through the candidate or employer path.',
+      'Redirects the browser to Google and preserves whether the user entered through the talent or employer path.',
   })
   @ApiResponse({
     status: HttpStatus.FOUND,
@@ -252,16 +186,14 @@ export class AuthController {
   @ApiResponse({
     status: HttpStatus.FOUND,
     description:
-      'Redirect to frontend: /candidate/onboarding or /employer/onboarding if setup incomplete; /discovery for employers, /admin for admins, or /dashboard for candidates if complete. Auth cookies set on this response.',
+      'Redirect to frontend: /talent/onboarding or /employer/onboarding if setup incomplete; /discovery for employers, /admin for admins, or /dashboard for talents if complete. Auth cookies set on this response.',
   })
   async googleAuthRedirect(
     @Req() request: Request & { user: GoogleProfile },
     @Res() response: Response,
   ) {
     const signupRoleCookie = readCookie(request, OAUTH_SIGNUP_ROLE_COOKIE);
-    const signupRole = isOAuthSignupRole(signupRoleCookie)
-      ? signupRoleCookie
-      : undefined;
+    const signupRole = normalizeOAuthSignupRole(signupRoleCookie);
 
     try {
       const result = await this.authService.googleCallback(

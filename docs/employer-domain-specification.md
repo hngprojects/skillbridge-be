@@ -6,12 +6,12 @@ The employer domain owns the company-side workflow in SkillBridge after authenti
 
 - employer onboarding
 - company profile management
-- candidate discovery state
+- talent discovery state
 - shortlist management
 - contact initiation
 - employer-facing notifications
 
-This domain should stay separate from auth and from candidate readiness logic. Employer consumes verified talent data but does not define it.
+This domain should stay separate from auth and from talent readiness logic. Employer consumes verified talent data but does not define it.
 
 ## Domain Boundaries
 
@@ -21,13 +21,13 @@ Employer should own:
 - company metadata
 - employer onboarding completion for company setup
 - shortlist state
-- employer-to-candidate contact initiation
+- employer-to-talent contact initiation
 
 Employer should not own:
 
 - authentication and token lifecycle
-- candidate assessment, scoring, or readiness calculation
-- candidate profile publishing rules
+- talent assessment, scoring, or readiness calculation
+- talent profile publishing rules
 - admin moderation policy
 
 ## Core Entities
@@ -69,7 +69,7 @@ Shortlist state belongs to employer workflows:
 CREATE TABLE shortlists (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employer_profile_id UUID NOT NULL REFERENCES employer_profiles(id) ON DELETE CASCADE,
-  talent_profile_id UUID NOT NULL REFERENCES candidate_profiles(id) ON DELETE CASCADE,
+  talent_profile_id UUID NOT NULL REFERENCES talent_profiles(id) ON DELETE CASCADE,
   saved_at TIMESTAMP NOT NULL DEFAULT NOW(),
   UNIQUE (employer_profile_id, talent_profile_id)
 );
@@ -83,7 +83,7 @@ Contact initiation should be explicit and auditable:
 CREATE TABLE employer_contacts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employer_profile_id UUID NOT NULL REFERENCES employer_profiles(id) ON DELETE CASCADE,
-  talent_profile_id UUID NOT NULL REFERENCES candidate_profiles(id) ON DELETE CASCADE,
+  talent_profile_id UUID NOT NULL REFERENCES talent_profiles(id) ON DELETE CASCADE,
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
   initiated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -118,15 +118,15 @@ Initial endpoints:
 - `PATCH /api/v1/employer/me`
 - `POST /api/v1/employer/onboarding`
 - `GET /api/v1/employer/discovery`
-- `POST /api/v1/employer/shortlists/:candidateId`
-- `DELETE /api/v1/employer/shortlists/:candidateId`
+- `POST /api/v1/employer/shortlists/:talentId`
+- `DELETE /api/v1/employer/shortlists/:talentId`
 - `GET /api/v1/employer/shortlists`
-- `POST /api/v1/employer/contacts/:candidateId`
+- `POST /api/v1/employer/contacts/:talentId`
 
 Likely future endpoints:
 
 - `GET /api/v1/employer/contacts`
-- `GET /api/v1/employer/candidates/:candidateId`
+- `GET /api/v1/employer/talent/:talentId`
 - `GET /api/v1/employer/analytics`
 
 ## Business Rules
@@ -134,17 +134,17 @@ Likely future endpoints:
 - Only users with role `employer` can access employer endpoints.
 - Employer profile should be created once, either:
   - immediately after employer signup, or
-  - during onboarding after role selection
-- Employers can only discover candidates whose profiles are published and meet visibility rules.
-- Employers can shortlist a candidate only once.
-- Employers should not contact candidates who are not published or whose contact state is blocked by policy.
-- Candidate ranking and readiness labels are read-only from the employer perspective.
+  - during employer-specific onboarding
+- Employers can only discover talent users whose profiles are published and meet visibility rules.
+- Employers can shortlist a given talent profile only once.
+- Employers should not contact talent users who are not published or whose contact state is blocked by policy.
+- Talent ranking and readiness labels are read-only from the employer perspective.
 
 ## Discovery Read Model
 
 Employer discovery reads will eventually need a composed query across:
 
-- `candidate_profiles`
+- `talent_profiles`
 - latest composite scores
 - role track
 - publication state
@@ -156,8 +156,8 @@ This should become a dedicated read query path. Do not overload the base employe
 ## Security and Permissions
 
 - Employer can read and update only their own employer profile.
-- Employer cannot see unpublished candidate profiles.
-- Employer cannot mutate candidate readiness data.
+- Employer cannot see unpublished talent profiles.
+- Employer cannot mutate talent readiness data.
 - Contact events should be auditable.
 - Shortlist and contact endpoints should enforce ownership through employer profile identity, not raw user id alone.
 
@@ -168,11 +168,11 @@ This should become a dedicated read query path. Do not overload the base employe
 3. Add onboarding persistence for company setup.
 4. Add shortlist storage and endpoints.
 5. Add contact initiation flow.
-6. Add candidate discovery read model and filtering.
+6. Add talent discovery read model and filtering.
 
 ## Open Decisions
 
 - Should multiple employer users belong to one company later, or is one user to one employer profile enough for now?
 - Should contact creation open a message thread immediately or only create a request record?
-- Which candidate fields are visible to employers before contact acceptance?
+- Which talent profile fields are visible to employers before contact acceptance?
 - Do shortlist and contact actions need plan or quota limits in v1?

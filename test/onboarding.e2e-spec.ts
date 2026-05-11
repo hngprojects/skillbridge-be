@@ -14,12 +14,12 @@ import { App } from 'supertest/types';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor';
 import { env } from '../src/config/env';
-import { CandidateController } from '../src/modules/candidate/candidate.controller';
-import { CandidateService } from '../src/modules/candidate/candidate.service';
+import { TalentController } from '../src/modules/talent/talent.controller';
+import { TalentService } from '../src/modules/talent/talent.service';
 import {
-  CandidateProfile,
-  CandidateProfileStatus,
-} from '../src/modules/candidate/entities/candidate-profile.entity';
+  TalentProfile,
+  TalentProfileStatus,
+} from '../src/modules/talent/entities/talent-profile.entity';
 import { EmployerController } from '../src/modules/employer/employer.controller';
 import { EmployerService } from '../src/modules/employer/employer.service';
 import { EmployerProfile } from '../src/modules/employer/entities/employer-profile.entity';
@@ -38,7 +38,7 @@ import { MailService } from '../src/modules/mail/mail.service';
 import { User, UserRole } from '../src/modules/users/entities/user.entity';
 import { UsersService } from '../src/modules/users/users.service';
 
-type CandidateUser = User & { role: UserRole.CANDIDATE };
+type TalentUser = User & { role: UserRole.TALENT };
 type EmployerUser = User & { role: UserRole.EMPLOYER };
 
 class InMemoryUsersService {
@@ -46,12 +46,12 @@ class InMemoryUsersService {
 
   constructor() {
     this.seedUser({
-      id: 'candidate-user',
-      email: 'candidate@example.com',
+      id: 'talent-user',
+      email: 'talent@example.com',
       first_name: 'Casey',
-      last_name: 'Candidate',
+      last_name: 'Talent',
       country: 'Nigeria',
-      role: UserRole.CANDIDATE,
+      role: UserRole.TALENT,
     });
     this.seedUser({
       id: 'employer-user',
@@ -120,8 +120,8 @@ class InMemoryUsersService {
   }
 }
 
-class InMemoryCandidateProfileRepository {
-  private readonly profiles = new Map<string, CandidateProfile>();
+class InMemoryTalentProfileRepository {
+  private readonly profiles = new Map<string, TalentProfile>();
   private nextId = 1;
   readonly manager: {
     transaction: <T>(
@@ -169,12 +169,12 @@ class InMemoryCandidateProfileRepository {
           create: <Entity>(
             _entity: new () => Entity,
             payload: Partial<Entity>,
-          ): Entity => Object.assign(new CandidateProfile(), payload) as Entity,
+          ): Entity => Object.assign(new TalentProfile(), payload) as Entity,
           save: async <Entity>(
             _entity: new () => Entity,
             payload: Entity,
           ): Promise<Entity> =>
-            this.save(payload as CandidateProfile) as Promise<Entity>,
+            this.save(payload as TalentProfile) as Promise<Entity>,
           update: async <Entity>(
             entity: new () => Entity,
             criteria: { id: string },
@@ -189,15 +189,15 @@ class InMemoryCandidateProfileRepository {
     };
   }
 
-  create(payload: Partial<CandidateProfile>): CandidateProfile {
-    return Object.assign(new CandidateProfile(), payload);
+  create(payload: Partial<TalentProfile>): TalentProfile {
+    return Object.assign(new TalentProfile(), payload);
   }
 
-  async save(profile: CandidateProfile): Promise<CandidateProfile> {
+  async save(profile: TalentProfile): Promise<TalentProfile> {
     const nextProfile = profile.id
       ? profile
       : Object.assign(profile, {
-          id: `candidate-profile-${this.nextId++}`,
+          id: `talent-profile-${this.nextId++}`,
           created_at: new Date(),
           updated_at: new Date(),
         });
@@ -207,7 +207,7 @@ class InMemoryCandidateProfileRepository {
 
   findOne(options: {
     where: { user_id: string };
-  }): Promise<CandidateProfile | null> {
+  }): Promise<TalentProfile | null> {
     return Promise.resolve(this.profiles.get(options.where.user_id) ?? null);
   }
 }
@@ -352,17 +352,17 @@ describe('Onboarding (e2e)', () => {
         PassportModule.register({ defaultStrategy: 'jwt' }),
         JwtModule.register({ secret: env.JWT_ACCESS_SECRET }),
       ],
-      controllers: [CandidateController, EmployerController],
+      controllers: [TalentController, EmployerController],
       providers: [
-        CandidateService,
+        TalentService,
         EmployerService,
         AuthService,
         JwtStrategy,
         { provide: UsersService, useClass: InMemoryUsersService },
         {
-          provide: getRepositoryToken(CandidateProfile),
+          provide: getRepositoryToken(TalentProfile),
           useFactory: (inMemoryUsersService: InMemoryUsersService) =>
-            new InMemoryCandidateProfileRepository(inMemoryUsersService),
+            new InMemoryTalentProfileRepository(inMemoryUsersService),
           inject: [UsersService],
         },
         {
@@ -422,14 +422,12 @@ describe('Onboarding (e2e)', () => {
     if (app) await app.close();
   });
 
-  it('POST /candidate/onboarding completes candidate onboarding and reissues auth cookies', async () => {
-    const user = (await usersService.findOne(
-      'candidate-user',
-    )) as CandidateUser;
+  it('POST /talent/onboarding completes talent onboarding and reissues auth cookies', async () => {
+    const user = (await usersService.findOne('talent-user')) as TalentUser;
     const cookieHeader = await accessCookieHeaderFor(jwtService, user);
 
     const response = await request(app.getHttpServer())
-      .post('/candidate/onboarding')
+      .post('/talent/onboarding')
       .set('Cookie', cookieHeader)
       .send({
         roleTrack: 'frontend',
@@ -442,15 +440,15 @@ describe('Onboarding (e2e)', () => {
     expect(findCookie(cookies, REFRESH_TOKEN_COOKIE)).toContain('HttpOnly');
     expect(response.body).toMatchObject({
       status_code: 200,
-      message: 'Candidate onboarding completed',
+      message: 'Talent onboarding completed',
       user: {
-        role: UserRole.CANDIDATE,
+        role: UserRole.TALENT,
         onboardingComplete: true,
       },
       profile: {
         user_id: user.id,
         role_track: 'frontend',
-        status: CandidateProfileStatus.NOT_STARTED,
+        status: TalentProfileStatus.NOT_STARTED,
       },
     });
 
@@ -458,14 +456,12 @@ describe('Onboarding (e2e)', () => {
     expect(updatedUser.onboarding_complete).toBe(true);
   });
 
-  it('POST /candidate/onboarding rejects repeated completion', async () => {
-    const user = (await usersService.findOne(
-      'candidate-user',
-    )) as CandidateUser;
+  it('POST /talent/onboarding rejects repeated completion', async () => {
+    const user = (await usersService.findOne('talent-user')) as TalentUser;
     const cookieHeader = await accessCookieHeaderFor(jwtService, user);
 
     await request(app.getHttpServer())
-      .post('/candidate/onboarding')
+      .post('/talent/onboarding')
       .set('Cookie', cookieHeader)
       .send({ roleTrack: 'frontend' })
       .expect(200);
@@ -476,7 +472,7 @@ describe('Onboarding (e2e)', () => {
     );
 
     await request(app.getHttpServer())
-      .post('/candidate/onboarding')
+      .post('/talent/onboarding')
       .set('Cookie', secondAccessCookie)
       .send({ roleTrack: 'frontend' })
       .expect(403)
@@ -524,10 +520,10 @@ describe('Onboarding (e2e)', () => {
   });
 
   it('POST /employer/onboarding rejects the wrong role', async () => {
-    const candidateUser = (await usersService.findOne(
-      'candidate-user',
-    )) as CandidateUser;
-    const cookieHeader = await accessCookieHeaderFor(jwtService, candidateUser);
+    const talentUser = (await usersService.findOne(
+      'talent-user',
+    )) as TalentUser;
+    const cookieHeader = await accessCookieHeaderFor(jwtService, talentUser);
 
     await request(app.getHttpServer())
       .post('/employer/onboarding')
