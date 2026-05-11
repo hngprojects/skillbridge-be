@@ -150,6 +150,14 @@ export class UsersService {
     });
   }
 
+  async updatePassword(id: string, passwordHash: string): Promise<void> {
+    await this.userModelAction.update({
+      ...NO_TRANSACTION,
+      identifierOptions: { id },
+      updatePayload: { password: passwordHash, refreshTokenHash: null },
+    });
+  }
+
   async markVerified(id: string): Promise<User> {
     await this.userModelAction.update({
       ...NO_TRANSACTION,
