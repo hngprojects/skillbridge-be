@@ -34,11 +34,21 @@ jobs:
       - name: Lint code
         timeout-minutes: 5
         run: pnpm run check-lint:ci
-
+      
+      - name: Lint code
+        id: lint
+        timeout-minutes: 5
+        continue-on-error: true
+        run: pnpm run check-lint:ci
+      
       - name: Lint debug
-        if: failure() && steps.lint.outcome == 'failure'
+        if: always() && steps.lint.outcome != 'success'
         timeout-minutes: 5
         run: pnpm exec eslint 'src/**/*.ts' 'test/**/*.ts' --debug
+      
+      - name: Fail if lint failed
+        if: always() && steps.lint.outcome != 'success'
+        run: exit 1
 
       - name: Run tests
         run: pnpm test -- --passWithNoTests
