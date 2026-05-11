@@ -134,7 +134,7 @@ Likely future endpoints:
 - Only users with role `candidate` can access candidate endpoints.
 - Candidate profile should be created once, either:
   - immediately after candidate signup, or
-  - during candidate-specific onboarding
+  - during role-selection onboarding
 - A candidate cannot publish a profile before meeting the minimum readiness rule.
 - Readiness state should come from scored product workflows, not from client input.
 - `profile_share_link` must be stable once published unless there is an explicit regeneration feature.
