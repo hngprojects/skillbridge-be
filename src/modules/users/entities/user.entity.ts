@@ -71,6 +71,15 @@ export class User {
   @Column({ type: 'enum', enum: USER_ROLE_VALUES, default: UserRole.TALENT })
   role: UserRole;
 
+  @ApiProperty({ required: false, nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    name: 'signup_reason',
+  })
+  signup_reason: string | null;
+
   @Exclude()
   @Column({
     type: 'varchar',

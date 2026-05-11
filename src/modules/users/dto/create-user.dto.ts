@@ -45,6 +45,12 @@ export class CreateUserDto {
   @MaxLength(500)
   profile_pic_url?: string;
 
+  @ApiProperty({ required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  signup_reason?: string;
+
   @ApiProperty({
     enum: USER_ROLE_VALUES,
     required: false,
