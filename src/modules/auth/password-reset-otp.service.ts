@@ -73,6 +73,22 @@ export class PasswordResetOtpService {
     return (result.affected ?? 0) > 0;
   }
 
+  async verify(userId: string, code: string): Promise<boolean> {
+    const latestOtp = await this.repository
+      .createQueryBuilder('password_reset_otp')
+      .where('password_reset_otp.user_id = :userId', { userId })
+      .andWhere('password_reset_otp.used_at IS NULL')
+      .andWhere('password_reset_otp.expires_at > NOW()')
+      .orderBy('password_reset_otp.created_at', 'DESC')
+      .getOne();
+
+    if (!latestOtp) {
+      return false;
+    }
+
+    return argon2.verify(latestOtp.otpHash, code);
+  }
+
   async countRecentResends(userId: string, since: Date): Promise<number> {
     return this.repository
       .createQueryBuilder('password_reset_otp')

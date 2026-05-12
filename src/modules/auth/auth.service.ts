@@ -19,6 +19,7 @@ import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { VerifyPasswordResetOtpDto } from './dto/verify-password-reset-otp.dto';
 import { VerificationOtpSource } from './entities/verification-otp.entity';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { VerificationOtpService } from './verification-otp.service';
@@ -82,6 +83,11 @@ export interface ForgotPasswordResponse {
 }
 
 export interface ResetPasswordResponse {
+  status: 'success';
+  message: string;
+}
+
+export interface VerifyPasswordResetOtpResponse {
   status: 'success';
   message: string;
 }
@@ -236,6 +242,25 @@ export class AuthService {
     return {
       status: 'success',
       message: SuccessMessages.AUTH.FORGOT_PASSWORD,
+    };
+  }
+
+  async verifyPasswordResetOtp(
+    dto: VerifyPasswordResetOtpDto,
+  ): Promise<VerifyPasswordResetOtpResponse> {
+    const user = await this.usersService.findByEmail(dto.email.trim());
+    if (!user) {
+      throw new BadRequestError(ErrorMessages.AUTH.INVALID_OR_EXPIRED_OTP);
+    }
+
+    const valid = await this.passwordResetOtpService.verify(user.id, dto.otp);
+    if (!valid) {
+      throw new BadRequestError(ErrorMessages.AUTH.INVALID_OR_EXPIRED_OTP);
+    }
+
+    return {
+      status: 'success',
+      message: SuccessMessages.AUTH.PASSWORD_RESET_OTP_VERIFIED,
     };
   }
 

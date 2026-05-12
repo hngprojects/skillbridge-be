@@ -360,6 +360,15 @@ Step 1 — Request reset
           Send OTP to user via email — client submits email + OTP to POST /auth/reset-password
 
 Step 2 — Submit new password
+  POST /auth/verify-reset-otp { email, otp }
+    │
+    ├── Look up user by email → not found → 400 { status: "error", message: "Invalid or expired OTP" }
+    ├── verify(userId, otp) → not found / expired / already used / hash mismatch
+    │     → 400 { status: "error", message: "Invalid or expired OTP" }
+    │
+    └── Response: 200 { status: "success", message: "OTP verified" }
+
+Step 3 — Submit new password
   POST /auth/reset-password { email, otp, password, confirmPassword }
     │
     ├── Look up user by email → not found → 400 { status: "error", message: "Invalid or expired OTP" }
@@ -721,6 +730,30 @@ Request a password reset code.
 > Always returns 200 regardless of whether the email exists (prevents enumeration).
 
 > When `REDIS_URL` is set, OTP issuance and email delivery run in BullMQ workers so the handler returns immediately. Without `REDIS_URL`, the same work runs inline on the Node event loop after the response is sent.
+
+---
+
+### `POST /auth/verify-reset-otp`
+
+Verify a password reset OTP before submitting the new password.
+
+**Request body:**
+
+```json
+{
+  "email": "string",
+  "otp": "string (6 digits)"
+}
+```
+
+**Responses:**
+
+```json
+200  { "status": "success", "message": "OTP verified" }
+400  { "status": "error", "message": "Invalid or expired OTP" }
+```
+
+> This endpoint does not consume the OTP. The final reset request must still send the OTP, and `POST /auth/reset-password` consumes it.
 
 ---
 
