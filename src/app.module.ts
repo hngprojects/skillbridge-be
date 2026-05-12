@@ -20,6 +20,7 @@ import { HealthModule } from './modules/health/health.module';
 import { InquiriesModule } from './modules/inquiries/inquiries.module';
 import { MailModule } from './modules/mail/mail.module';
 import { UsersModule } from './modules/users/users.module';
+import { AssessmentModule } from './modules/assessment/assessment.module';
 import { ProbeController } from './probe.controller';
 import { WelcomeController } from './welcome.controller';
 
@@ -41,6 +42,7 @@ import { WelcomeController } from './welcome.controller';
     TalentModule,
     EmployerModule,
     MailModule,
+    AssessmentModule,
   ],
   providers: [
     {

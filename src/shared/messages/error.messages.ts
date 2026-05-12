@@ -38,6 +38,12 @@ export const ErrorMessages = {
     TRACK_REQUIRED_FOR_PERSONALISE: 'Track is required to generate assessments',
     PERSONALISATION_FAILED: 'Personalisation failed, please try again',
   },
+  ASSESSMENT: {
+    ONBOARDING_INCOMPLETE: 'You must complete your profile before starting the assessment.',
+    LOCKED: 'You are currently in a cool-off period.',
+    IN_PROGRESS: 'An assessment is already in progress.',
+    INVALID_STATE_TRANSITION: 'Cannot submit assessment. No assessment in progress.',
+  },
   COMMON: {
     INSUFFICIENT_PERMISSIONS: 'Insufficient permissions',
     INTERNAL_SERVER_ERROR: 'Internal server error',

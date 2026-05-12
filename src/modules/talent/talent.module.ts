@@ -16,5 +16,6 @@ import { TalentService } from './talent.service';
   ],
   controllers: [TalentController],
   providers: [TalentService],
+  exports: [TalentService, TypeOrmModule],
 })
 export class TalentModule {}
