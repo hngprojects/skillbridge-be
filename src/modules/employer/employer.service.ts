@@ -2,14 +2,22 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthResult, AuthService } from '../auth/auth.service';
+import { TalentProfileStatus } from '../talent/entities/talent-profile.entity';
+import { TalentService } from '../talent/talent.service';
 import { UsersService } from '../users/users.service';
 import { CompleteEmployerOnboardingDto } from './dto/complete-employer-onboarding.dto';
+import { GetEmployerShortlistQueryDto } from './dto/get-employer-shortlist-query.dto';
 import { SaveEmployerProfileDto } from './dto/save-employer-profile.dto';
 import { EmployerProfile } from './entities/employer-profile.entity';
+import { Shortlist } from './entities/shortlist.entity';
+import { ShortlistRepository } from './repositories/shortlist.repository';
+import { EmployerShortlistItem } from './types/employer-shortlist-item.type';
 import {
+  BadRequestError,
   ConflictError,
   ErrorMessages,
   ForbiddenError,
+  NotFoundError,
   SuccessMessages,
 } from '../../shared';
 
@@ -27,6 +35,8 @@ export class EmployerService {
     private readonly employerProfileRepository: Repository<EmployerProfile>,
     private readonly authService: AuthService,
     private readonly usersService: UsersService,
+    private readonly talentService: TalentService,
+    private readonly shortlistRepository: ShortlistRepository,
   ) {}
 
   async saveProfile(
@@ -124,5 +134,145 @@ export class EmployerService {
       profile,
       tokens: session.tokens,
     };
+  }
+
+  async addToShortlist(
+    employerId: string,
+    talentId: string,
+  ): Promise<{
+    status: string;
+    message: string;
+    data: { candidateId: string; shortlistedAt: string };
+  }> {
+    const talent = await this.talentService.findById(talentId);
+    if (!talent) {
+      throw new NotFoundError(ErrorMessages.SHORTLIST.CANDIDATE_NOT_FOUND);
+    }
+
+    if (talent.status !== TalentProfileStatus.JOB_READY) {
+      throw new BadRequestError(ErrorMessages.SHORTLIST.CANDIDATE_NOT_JOB_READY);
+    }
+
+    const existingShortlist =
+      await this.shortlistRepository.findByEmployerAndCandidate(
+        employerId,
+        talentId,
+      );
+    if (existingShortlist) {
+      throw new ConflictError(ErrorMessages.SHORTLIST.DUPLICATE_ENTRY);
+    }
+
+    const shortlist = await this.shortlistRepository.create(
+      employerId,
+      talentId,
+    );
+
+    return {
+      status: 'success',
+      message: SuccessMessages.SHORTLIST.CANDIDATE_ADDED,
+      data: {
+        candidateId: talentId,
+        shortlistedAt: shortlist.saved_at.toISOString(),
+      },
+    };
+  }
+
+  async removeFromShortlist(
+    employerId: string,
+    candidateId: string,
+  ): Promise<{ status: string; message: string }> {
+    const shortlist = await this.shortlistRepository.findByEmployerAndCandidate(
+      employerId,
+      candidateId,
+    );
+    if (!shortlist) {
+      throw new NotFoundError(ErrorMessages.SHORTLIST.ENTRY_NOT_FOUND);
+    }
+
+    await this.shortlistRepository.deleteByEmployerAndCandidate(
+      employerId,
+      candidateId,
+    );
+
+    return {
+      status: 'success',
+      message: SuccessMessages.SHORTLIST.CANDIDATE_REMOVED,
+    };
+  }
+
+  async getShortlist(
+    employerId: string,
+    query: GetEmployerShortlistQueryDto,
+  ): Promise<{
+    status: string;
+    paginationMeta: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+    payload: EmployerShortlistItem[];
+  }> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const sort = query.sort ?? 'shortlistedAt';
+    const order = query.order ?? 'desc';
+
+    const { items, total } = await this.shortlistRepository.findByEmployer(
+      employerId,
+      { page, limit, sort, order },
+    );
+
+    return {
+      status: 'success',
+      paginationMeta: {
+        page,
+        limit,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+      },
+      payload: items.map((shortlist) => this.mapShortlistItem(shortlist)),
+    };
+  }
+
+  private mapShortlistItem(shortlist: Shortlist): EmployerShortlistItem {
+    const candidate = shortlist.candidate;
+    const user = candidate.user;
+
+    return {
+      candidateId: shortlist.candidate_id,
+      fullName: `${user.first_name} ${user.last_name}`.trim(),
+      roleTrack: this.formatRoleTrack(candidate.track ?? candidate.role_track),
+      tier: this.formatTier(candidate.status),
+      compositeScore: null,
+      shortlistedAt: shortlist.saved_at.toISOString(),
+    };
+  }
+
+  private formatRoleTrack(track: string | null): string | null {
+    if (!track) {
+      return null;
+    }
+
+    return track
+      .split('_')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ');
+  }
+
+  private formatTier(status: TalentProfileStatus): string {
+    switch (status) {
+      case TalentProfileStatus.JOB_READY:
+        return 'Job Ready';
+      case TalentProfileStatus.EMERGING:
+        return 'Emerging';
+      case TalentProfileStatus.NOT_READY:
+        return 'Not Ready';
+      case TalentProfileStatus.IN_PROGRESS:
+        return 'In Progress';
+      case TalentProfileStatus.NOT_STARTED:
+      default:
+        return 'Not Started';
+    }
   }
 }

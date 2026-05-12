@@ -1,9 +1,14 @@
 import {
   Body,
   Controller,
+  Delete,
+  Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
   Post,
+  Query,
   Res,
   UsePipes,
   ValidationPipe,
@@ -22,6 +27,8 @@ import { setAuthCookies } from '../auth/auth.cookies';
 import { UserRole } from '../users/entities/user.entity';
 import { CompleteEmployerOnboardingDto } from './dto/complete-employer-onboarding.dto';
 import { SaveEmployerProfileDto } from './dto/save-employer-profile.dto';
+import { AddToShortlistDto } from './dto/add-to-shortlist.dto';
+import { GetEmployerShortlistQueryDto } from './dto/get-employer-shortlist-query.dto';
 import { EmployerService } from './employer.service';
 
 @ApiTags('employer')
@@ -67,5 +74,53 @@ export class EmployerController {
       user: result.user,
       profile: result.profile,
     };
+  }
+
+  @Post('shortlist')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add a Job Ready candidate to the employer shortlist' })
+  @ApiUnprocessableEntityResponse({ description: 'Validation failed — field-specific error messages' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+    }),
+  )
+  async addToShortlist(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: AddToShortlistDto,
+  ) {
+    return this.employerService.addToShortlist(userId, dto.talentId);
+  }
+
+  @Get('shortlist')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get the authenticated employer shortlist' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+    }),
+  )
+  async getShortlist(
+    @CurrentUser('sub') userId: string,
+    @Query() query: GetEmployerShortlistQueryDto,
+  ) {
+    return this.employerService.getShortlist(userId, query);
+  }
+
+  @Delete('shortlist/:candidateId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove a candidate from the employer shortlist' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  async removeFromShortlist(
+    @CurrentUser('sub') userId: string,
+    @Param('candidateId', ParseUUIDPipe) candidateId: string,
+  ) {
+    return this.employerService.removeFromShortlist(userId, candidateId);
   }
 }
