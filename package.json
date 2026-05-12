@@ -2,7 +2,6 @@
   "name": "skillbridge-be",
   "version": "0.0.1",
   "description": "SkillBridge backend built from the HNG NestJS boilerplate conventions",
-  "packageManager": "pnpm@9.15.0",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
