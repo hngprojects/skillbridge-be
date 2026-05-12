@@ -24,11 +24,10 @@ import {
   OAUTH_SIGNUP_ROLE_COOKIE,
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
-import {
-  AuthService,
-  FORGOT_PASSWORD_SUCCESS_MESSAGE,
-} from '../src/modules/auth/auth.service';
-import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
+import { AuthService } from '../src/modules/auth/auth.service';
+import { SuccessMessages } from '../src/shared';
+import { PasswordResetOtp } from '../src/modules/auth/entities/password-reset-otp.entity';
+import { PasswordResetOtpService } from '../src/modules/auth/password-reset-otp.service';
 import { PasswordResetDeliveryService } from '../src/modules/auth/password-reset-delivery.service';
 import { GoogleOAuthGuard } from '../src/modules/auth/guards/google-auth.guard';
 import type { GoogleProfile } from '../src/modules/auth/strategies/google.strategy';
@@ -402,9 +401,9 @@ class MockMailService {
 
   readonly passwordResetMessages: Array<{
     to: string;
-    token: string;
+    otp: string;
+    recipientFirstName: string;
     expiresAt: Date;
-    resetLink?: string;
   }> = [];
 
   async sendVerificationOtp(params: {
@@ -419,9 +418,9 @@ class MockMailService {
 
   async sendPasswordReset(params: {
     to: string;
-    token: string;
+    otp: string;
+    recipientFirstName: string;
     expiresAt: Date;
-    resetLink?: string;
   }) {
     this.passwordResetMessages.push(params);
     return { id: `reset-mail-${this.passwordResetMessages.length}` };
@@ -455,61 +454,14 @@ const expectAuthCookies = (response: Response): string => {
   return cookies.map(cookiePair).join('; ');
 };
 
-const mockPasswordResetSave = jest.fn().mockResolvedValue(undefined);
-const mockPasswordResetInvalidateExecute = jest.fn().mockResolvedValue({
-  affected: 0,
-});
-
-const mockPasswordResetTokenRepository = {
-  create: jest.fn((row: unknown) => row),
-  save: mockPasswordResetSave,
-  findOne: jest.fn().mockResolvedValue(null),
-  createQueryBuilder: jest.fn(() => ({
-    update: jest.fn().mockReturnThis(),
-    set: jest.fn().mockReturnThis(),
-    where: jest.fn().mockReturnThis(),
-    andWhere: jest.fn().mockReturnThis(),
-    execute: mockPasswordResetInvalidateExecute,
-  })),
-  manager: {
-    transaction: jest.fn(
-      async (
-        fn: (m: {
-          createQueryBuilder: () => {
-            update: jest.Mock;
-            set: jest.Mock;
-            where: jest.Mock;
-            andWhere: jest.Mock;
-            execute: jest.Mock;
-          };
-          findOne: jest.Mock;
-          create: jest.Mock;
-          save: jest.Mock;
-        }) => Promise<void>,
-      ) => {
-        const qb = {
-          update: jest.fn().mockReturnThis(),
-          set: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          andWhere: jest.fn().mockReturnThis(),
-          execute: mockPasswordResetInvalidateExecute,
-        };
-        await fn({
-          createQueryBuilder: () => qb,
-          findOne: jest.fn(
-            async (Entity: unknown, opts?: { where?: { id?: string } }) => {
-              if (Entity === User && opts?.where?.id) {
-                return { id: opts.where.id };
-              }
-              return null;
-            },
-          ),
-          create: jest.fn((_entity: unknown, row: unknown) => row),
-          save: mockPasswordResetSave,
-        });
-      },
-    ),
-  },
+const mockPasswordResetOtpService = {
+  issue: jest.fn().mockResolvedValue({
+    code: '123456',
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+  }),
+  verify: jest.fn().mockResolvedValue(true),
+  consume: jest.fn().mockResolvedValue(true),
+  countRecentResends: jest.fn().mockResolvedValue(0),
 };
 
 describe('Auth (e2e)', () => {
@@ -541,8 +493,12 @@ describe('Auth (e2e)', () => {
         },
         { provide: MailService, useClass: MockMailService },
         {
-          provide: getRepositoryToken(PasswordResetToken),
-          useValue: mockPasswordResetTokenRepository,
+          provide: PasswordResetOtpService,
+          useValue: mockPasswordResetOtpService,
+        },
+        {
+          provide: getRepositoryToken(PasswordResetOtp),
+          useValue: {},
         },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
@@ -625,11 +581,10 @@ describe('Auth (e2e)', () => {
 
     expect(response.body).toMatchObject({
       status: 'success',
-      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+      message: SuccessMessages.AUTH.FORGOT_PASSWORD,
     });
     expect(mailService.passwordResetMessages).toHaveLength(0);
-    expect(mockPasswordResetTokenRepository.save).not.toHaveBeenCalled();
-    expect(mockPasswordResetInvalidateExecute).not.toHaveBeenCalled();
+    expect(mockPasswordResetOtpService.issue).not.toHaveBeenCalled();
   });
 
   it('POST /auth/forgot-password for existing user triggers token save and sends reset mail', async () => {
@@ -647,44 +602,32 @@ describe('Auth (e2e)', () => {
 
     expect(response.body).toMatchObject({
       status: 'success',
-      message: FORGOT_PASSWORD_SUCCESS_MESSAGE,
+      message: SuccessMessages.AUTH.FORGOT_PASSWORD,
     });
-    expect(mockPasswordResetInvalidateExecute).toHaveBeenCalled();
-    expect(mockPasswordResetTokenRepository.save).toHaveBeenCalled();
+    expect(mockPasswordResetOtpService.issue).toHaveBeenCalled();
     expect(mailService.passwordResetMessages).toHaveLength(1);
     expect(mailService.passwordResetMessages[0]?.to).toBe(
       registerPayload.email,
     );
-    expect(mailService.passwordResetMessages[0]?.token?.length).toBeGreaterThan(
-      10,
-    );
+    expect(mailService.passwordResetMessages[0]?.otp).toBeDefined();
   });
 
-  it('POST /auth/forgot-password sets reset link with fragment token when PASSWORD_RESET_WEB_BASE_URL is set', async () => {
-    jest.replaceProperty(
-      env,
-      'PASSWORD_RESET_WEB_BASE_URL',
-      'https://example.com/reset',
-    );
-    try {
-      await request(app.getHttpServer())
-        .post('/auth/register')
-        .send(registerPayload)
-        .expect(201);
+  it('POST /auth/forgot-password for existing user sends OTP email', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
 
-      await request(app.getHttpServer())
-        .post('/auth/forgot-password')
-        .send({ email: registerPayload.email })
-        .expect(200);
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: registerPayload.email })
+      .expect(200);
 
-      await passwordResetQueue.awaitIdleForTests();
+    await passwordResetQueue.awaitIdleForTests();
 
-      const link = mailService.passwordResetMessages[0]?.resetLink;
-      expect(link).toBeDefined();
-      expect(link).toMatch(/^https:\/\/example\.com\/reset#token=/);
-    } finally {
-      jest.replaceProperty(env, 'PASSWORD_RESET_WEB_BASE_URL', undefined);
-    }
+    expect(mockPasswordResetOtpService.issue).toHaveBeenCalled();
+    expect(mailService.passwordResetMessages).toHaveLength(1);
+    expect(mailService.passwordResetMessages[0]?.otp).toBeDefined();
   });
 
   it('POST /auth/forgot-password returns 429 after 5 requests in the same minute from the same client', async () => {
@@ -706,11 +649,67 @@ describe('Auth (e2e)', () => {
     });
   });
 
+  it('POST /auth/verify-reset-otp returns 200 for a valid password reset OTP', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/verify-reset-otp')
+      .send({ email: registerPayload.email, otp: '123456' })
+      .expect(200);
+
+    const user = await usersService.findByEmail(registerPayload.email);
+    expect(mockPasswordResetOtpService.verify).toHaveBeenCalledWith(
+      user?.id,
+      '123456',
+    );
+    expect(mockPasswordResetOtpService.consume).not.toHaveBeenCalled();
+    expect(response.body).toMatchObject({
+      status: 'success',
+      message: SuccessMessages.AUTH.PASSWORD_RESET_OTP_VERIFIED,
+    });
+  });
+
+  it('POST /auth/verify-reset-otp returns 400 for an invalid password reset OTP', async () => {
+    mockPasswordResetOtpService.verify.mockResolvedValueOnce(false);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/verify-reset-otp')
+      .send({ email: registerPayload.email, otp: '999999' })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      success: false,
+      status_code: 400,
+    });
+  });
+
+  it('POST /auth/verify-reset-otp returns 400 for an unknown email', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/verify-reset-otp')
+      .send({ email: 'missing@example.com', otp: '123456' })
+      .expect(400);
+
+    expect(mockPasswordResetOtpService.verify).not.toHaveBeenCalled();
+    expect(response.body).toMatchObject({
+      success: false,
+      status_code: 400,
+    });
+  });
+
   it('POST /auth/reset-password returns 400 when passwords do not match', async () => {
     const response = await request(app.getHttpServer())
       .post('/auth/reset-password')
       .send({
-        token: 'dummy-token',
+        email: 'user@example.com',
+        otp: '123456',
         password: 'StrongPass123',
         confirmPassword: 'OtherPass999',
       });
@@ -1028,8 +1027,12 @@ describe('Google OAuth callback (e2e)', () => {
         },
         { provide: MailService, useClass: MockMailService },
         {
-          provide: getRepositoryToken(PasswordResetToken),
-          useValue: mockPasswordResetTokenRepository,
+          provide: PasswordResetOtpService,
+          useValue: mockPasswordResetOtpService,
+        },
+        {
+          provide: getRepositoryToken(PasswordResetOtp),
+          useValue: {},
         },
         {
           provide: PasswordResetQueueService,

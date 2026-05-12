@@ -16,6 +16,7 @@ import { TransformInterceptor } from '../src/common/interceptors/transform.inter
 import { env } from '../src/config/env';
 import { TalentController } from '../src/modules/talent/talent.controller';
 import { TalentService } from '../src/modules/talent/talent.service';
+import { UploadService } from '../src/modules/upload/upload.service';
 import {
   TalentProfile,
   TalentProfileStatus,
@@ -28,7 +29,8 @@ import {
   REFRESH_TOKEN_COOKIE,
 } from '../src/modules/auth/auth.cookies';
 import { AuthService } from '../src/modules/auth/auth.service';
-import { PasswordResetToken } from '../src/modules/auth/entities/password-reset-token.entity';
+import { PasswordResetOtp } from '../src/modules/auth/entities/password-reset-otp.entity';
+import { PasswordResetOtpService } from '../src/modules/auth/password-reset-otp.service';
 import { PasswordResetQueueService } from '../src/modules/auth/password-reset-queue.service';
 import { VerificationOtpService } from '../src/modules/auth/verification-otp.service';
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard';
@@ -377,15 +379,18 @@ describe('Onboarding (e2e)', () => {
         },
         { provide: MailService, useClass: StubMailService },
         {
-          provide: getRepositoryToken(PasswordResetToken),
+          provide: PasswordResetOtpService,
           useValue: {
-            manager: {
-              transaction: jest.fn(
-                async (_fn: (m: unknown) => Promise<void>) => undefined,
-              ),
-            },
-            findOne: jest.fn(),
+            issue: jest
+              .fn()
+              .mockResolvedValue({ code: '123456', expiresAt: new Date() }),
+            consume: jest.fn().mockResolvedValue(true),
+            countRecentResends: jest.fn().mockResolvedValue(0),
           },
+        },
+        {
+          provide: getRepositoryToken(PasswordResetOtp),
+          useValue: {},
         },
         {
           provide: PasswordResetQueueService,
@@ -394,6 +399,12 @@ describe('Onboarding (e2e)', () => {
             awaitIdleForTests: jest.fn().mockResolvedValue(undefined),
             onModuleDestroy: jest.fn(),
             onModuleInit: jest.fn(),
+          },
+        },
+        {
+          provide: UploadService,
+          useValue: {
+            uploadAvatar: jest.fn().mockResolvedValue('https://bucket.s3.region.amazonaws.com/avatars/test.jpg'),
           },
         },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
@@ -493,11 +504,11 @@ describe('Onboarding (e2e)', () => {
       .post('/employer/onboarding')
       .set('Cookie', cookieHeader)
       .send({
-        companyName: 'Acme Labs',
-        companySize: '11-50',
-        industry: 'Technology',
-        websiteUrl: 'https://acmelabs.example',
-        hiringRegion: 'Remote, Africa',
+        joiningAs: 'recruiter',
+        desiredRoles: ['frontend_developer', 'backend_developer'],
+        region: 'Africa',
+        hiringCountRange: '6_10',
+        companyWebsite: 'https://acmelabs.example',
       })
       .expect(200);
 
@@ -510,11 +521,11 @@ describe('Onboarding (e2e)', () => {
       },
       profile: {
         user_id: user.id,
-        company_name: 'Acme Labs',
-        company_size: '11-50',
-        industry: 'Technology',
-        website_url: 'https://acmelabs.example',
-        hiring_region: 'Remote, Africa',
+        joining_as: 'recruiter',
+        desired_roles: ['frontend_developer', 'backend_developer'],
+        region: 'Africa',
+        hiring_count_range: '6_10',
+        company_website: 'https://acmelabs.example',
       },
     });
   });

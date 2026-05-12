@@ -1,13 +1,23 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { MatchField } from '../validators/match-field.decorator';
 
 export class ResetPasswordDto {
-  @ApiProperty({ description: 'Plaintext reset token from the email' })
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @MaxLength(255)
+  email: string;
+
+  @ApiProperty({ description: '6-digit OTP from the password reset email' })
   @IsString()
-  @MinLength(1)
-  @MaxLength(512)
-  token: string;
+  @Matches(/^\d{6}$/, { message: 'otp must be a 6-digit number' })
+  otp: string;
 
   @ApiProperty({ minLength: 8, maxLength: 128 })
   @IsString()

@@ -52,8 +52,7 @@ export const env = createEnv({
       .positive()
       .default(3),
 
-    PASSWORD_RESET_EXPIRES_IN: durationString('1h'),
-    PASSWORD_RESET_WEB_BASE_URL: z.string().url().optional(),
+    PASSWORD_RESET_OTP_EXPIRES_IN: durationString('15m'),
 
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
     /**
@@ -80,6 +79,12 @@ export const env = createEnv({
     EMAIL_LOGO_URL: z.string().url().optional(),
     /** Support address shown in transactional emails. */
     SUPPORT_EMAIL: z.email().default('support@skillbridge.com'),
+
+    /** AWS S3 — optional; app boots without them, upload endpoint returns 503 if unset */
+    AWS_REGION: z.string().optional(),
+    AWS_S3_BUCKET: z.string().optional(),
+    AWS_ACCESS_KEY_ID: z.string().optional(),
+    AWS_SECRET_ACCESS_KEY: z.string().optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

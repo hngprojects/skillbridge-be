@@ -38,6 +38,7 @@
     "start:prod:migrate": "typeorm migration:run -d dist/database/data-source.js && node dist/main.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1045.0",
     "@hng-sdk/orm": "^0.0.0",
     "@nestjs/common": "^11.1.19",
     "@nestjs/config": "^4.0.4",
@@ -45,6 +46,7 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.19",
+    "multer": "^2.1.0",
     "@nestjs/swagger": "^11.4.2",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.1",
@@ -76,6 +78,7 @@
     "@types/express": "^5.0.6",
     "@types/jest": "^29.5.14",
     "@types/ms": "^2.1.0",
+    "@types/multer": "^2.1.0",
     "@types/node": "^22.10.2",
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/passport-jwt": "^4.0.1",

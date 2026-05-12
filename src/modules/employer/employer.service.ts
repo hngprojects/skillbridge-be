@@ -1,15 +1,17 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthResult, AuthService } from '../auth/auth.service';
 import { UsersService } from '../users/users.service';
 import { CompleteEmployerOnboardingDto } from './dto/complete-employer-onboarding.dto';
+import { SaveEmployerProfileDto } from './dto/save-employer-profile.dto';
 import { EmployerProfile } from './entities/employer-profile.entity';
+import {
+  ConflictError,
+  ErrorMessages,
+  ForbiddenError,
+  SuccessMessages,
+} from '../../shared';
 
 export type EmployerOnboardingResult = {
   message: string;
@@ -27,6 +29,45 @@ export class EmployerService {
     private readonly usersService: UsersService,
   ) {}
 
+  async saveProfile(
+    userId: string,
+    dto: SaveEmployerProfileDto,
+  ): Promise<{ status: string; message: string }> {
+    await this.employerProfileRepository.manager.transaction(async (manager) => {
+      let user;
+      try {
+        user = await this.usersService.getUserForOnboarding(manager, userId);
+      } catch (error: unknown) {
+        if (error instanceof NotFoundException) {
+          throw new ForbiddenError(ErrorMessages.ONBOARDING.INVALID_USER);
+        }
+        throw error;
+      }
+      if (user.onboarding_complete) {
+        throw new ForbiddenError(ErrorMessages.ONBOARDING.ALREADY_COMPLETED);
+      }
+
+      let profile = await manager.findOne(EmployerProfile, {
+        where: { user_id: userId },
+      });
+      if (!profile) {
+        profile = manager.create(EmployerProfile, { user_id: userId });
+      }
+
+      profile.employer_type = dto.employerType;
+      profile.company_name = dto.companyName.trim();
+      profile.company_size = dto.companySize;
+      profile.company_website = dto.companyWebsite?.trim() ?? null;
+      profile.hiring_roles = dto.hiringRoles;
+      profile.hiring_locations = dto.hiringLocations;
+
+      await manager.save(EmployerProfile, profile);
+      await this.usersService.markOnboardingCompleteWithManager(manager, userId);
+    });
+
+    return { status: 'success', message: SuccessMessages.ONBOARDING.EMPLOYER_PROFILE_SAVED };
+  }
+
   async completeOnboarding(
     userId: string,
     dto: CompleteEmployerOnboardingDto,
@@ -38,29 +79,28 @@ export class EmployerService {
           user = await this.usersService.getUserForOnboarding(manager, userId);
         } catch (error: unknown) {
           if (error instanceof NotFoundException) {
-            throw new ForbiddenException('Invalid user');
+            throw new ForbiddenError(ErrorMessages.ONBOARDING.INVALID_USER);
           }
           throw error;
         }
         if (user.onboarding_complete) {
-          throw new ForbiddenException('Onboarding already completed');
+          throw new ForbiddenError(ErrorMessages.ONBOARDING.ALREADY_COMPLETED);
         }
 
         const existingProfile = await manager.findOne(EmployerProfile, {
           where: { user_id: userId },
         });
         if (existingProfile) {
-          throw new ConflictException('Employer profile already exists');
+          throw new ConflictError(ErrorMessages.ONBOARDING.EMPLOYER_PROFILE_EXISTS);
         }
 
         const nextProfile = manager.create(EmployerProfile, {
           user_id: userId,
-          company_name: dto.companyName.trim(),
-          company_size: dto.companySize?.trim() || null,
-          industry: dto.industry?.trim() || null,
-          website_url: dto.websiteUrl?.trim() || null,
-          company_description: dto.companyDescription?.trim() || null,
-          hiring_region: dto.hiringRegion?.trim() || null,
+          joining_as: dto.joiningAs,
+          desired_roles: dto.desiredRoles,
+          region: dto.region.trim(),
+          hiring_count_range: dto.hiringCountRange,
+          company_website: dto.companyWebsite?.trim() || null,
         });
 
         const savedProfile = await manager.save(EmployerProfile, nextProfile);
@@ -75,7 +115,7 @@ export class EmployerService {
 
     const session = await this.authService.issueSessionForUser(
       userId,
-      'Employer onboarding completed',
+      SuccessMessages.ONBOARDING.EMPLOYER_COMPLETED,
     );
 
     return {

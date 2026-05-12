@@ -39,18 +39,13 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       );
     }
 
-    if (!name?.givenName || !name?.familyName) {
-      return done(
-        new BadRequestException(
-          'Name information missing from Google OAuth profile. Add a given name and family name to your Google account, or sign up with email and password.',
-        ),
-      );
-    }
+    const firstName = name?.givenName || profile.displayName || 'User';
+    const lastName = name?.familyName || '';
 
     const user: GoogleProfile = {
       email: emails[0].value,
-      firstName: name.givenName,
-      lastName: name.familyName,
+      firstName,
+      lastName,
       picture: photos?.[0]?.value ?? '',
       providerId: profile.id,
       country: env.GOOGLE_DEFAULT_COUNTRY ?? 'Unknown',

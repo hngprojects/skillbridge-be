@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ExecutionContext,
-  Injectable,
-} from '@nestjs/common';
+import { ExecutionContext, Injectable } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request, Response } from 'express';
 import {
@@ -10,6 +6,7 @@ import {
   setOAuthSignupRoleCookie,
 } from '../auth.cookies';
 import { normalizeOAuthSignupRole } from '../oauth-signup-role';
+import { BadRequestError, ErrorMessages } from '../../../shared';
 
 @Injectable()
 export class GoogleOAuthGuard extends AuthGuard('google') {
@@ -30,7 +27,7 @@ export class GoogleOAuthGuard extends AuthGuard('google') {
       throw err;
     }
     if (!user) {
-      throw new BadRequestException('Google authentication failed');
+      throw new BadRequestError(ErrorMessages.AUTH.GOOGLE_AUTH_FAILED);
     }
     return user;
   }
@@ -52,7 +49,7 @@ export class GoogleOAuthGuard extends AuthGuard('google') {
     if (role !== undefined) {
       const normalizedRole = normalizeOAuthSignupRole(role);
       if (!normalizedRole) {
-        throw new BadRequestException('Invalid OAuth signup role');
+        throw new BadRequestError(ErrorMessages.AUTH.INVALID_OAUTH_SIGNUP_ROLE);
       }
       setOAuthSignupRoleCookie(response, normalizedRole);
     } else {
