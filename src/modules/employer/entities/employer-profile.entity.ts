@@ -26,6 +26,20 @@ export class EmployerProfile {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
+  /** New profile endpoint fields (BE-ONB-EMP-001) */
+  @ApiProperty({ example: 'Founder', nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  employer_type: string | null;
+
+  @ApiProperty({ example: ['Engineering', 'Design'], nullable: true, type: [String] })
+  @Column({ type: 'text', array: true, nullable: true })
+  hiring_roles: string[] | null;
+
+  @ApiProperty({ example: ['Nigeria', 'Remote Worldwide'], nullable: true, type: [String] })
+  @Column({ type: 'text', array: true, nullable: true })
+  hiring_locations: string[] | null;
+
+  /** Legacy onboarding field (lowercase) */
   @ApiProperty({ example: 'recruiter', nullable: true })
   @Column({ type: 'varchar', length: 50, nullable: true })
   joining_as: string | null;

@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { AuthResult, AuthService } from '../auth/auth.service';
 import { UsersService } from '../users/users.service';
 import { CompleteEmployerOnboardingDto } from './dto/complete-employer-onboarding.dto';
+import { SaveEmployerProfileDto } from './dto/save-employer-profile.dto';
 import { EmployerProfile } from './entities/employer-profile.entity';
 import {
   ConflictError,
@@ -27,6 +28,45 @@ export class EmployerService {
     private readonly authService: AuthService,
     private readonly usersService: UsersService,
   ) {}
+
+  async saveProfile(
+    userId: string,
+    dto: SaveEmployerProfileDto,
+  ): Promise<{ status: string; message: string }> {
+    await this.employerProfileRepository.manager.transaction(async (manager) => {
+      let user;
+      try {
+        user = await this.usersService.getUserForOnboarding(manager, userId);
+      } catch (error: unknown) {
+        if (error instanceof NotFoundException) {
+          throw new ForbiddenError(ErrorMessages.ONBOARDING.INVALID_USER);
+        }
+        throw error;
+      }
+      if (user.onboarding_complete) {
+        throw new ForbiddenError(ErrorMessages.ONBOARDING.ALREADY_COMPLETED);
+      }
+
+      let profile = await manager.findOne(EmployerProfile, {
+        where: { user_id: userId },
+      });
+      if (!profile) {
+        profile = manager.create(EmployerProfile, { user_id: userId });
+      }
+
+      profile.employer_type = dto.employerType;
+      profile.company_name = dto.companyName.trim();
+      profile.company_size = dto.companySize;
+      profile.company_website = dto.companyWebsite?.trim() ?? null;
+      profile.hiring_roles = dto.hiringRoles;
+      profile.hiring_locations = dto.hiringLocations;
+
+      await manager.save(EmployerProfile, profile);
+      await this.usersService.markOnboardingCompleteWithManager(manager, userId);
+    });
+
+    return { status: 'success', message: SuccessMessages.ONBOARDING.EMPLOYER_PROFILE_SAVED };
+  }
 
   async completeOnboarding(
     userId: string,

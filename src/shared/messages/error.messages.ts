@@ -30,8 +30,13 @@ export const ErrorMessages = {
     EMPLOYER_PROFILE_EXISTS: 'Employer profile already exists',
     CANDIDATE_PROFILE_EXISTS: 'Candidate profile already exists',
     NO_FILE: 'No file provided',
+    PHOTO_REQUIRED: 'Photo is required',
     INVALID_FILE_TYPE: 'Only image files are allowed (jpeg, png, webp)',
+    INVALID_PHOTO_TYPE: 'Invalid file type, please upload a valid image',
     FILE_TOO_LARGE: 'File must be smaller than 5 MB',
+    PHOTO_TOO_LARGE: 'File size too large, please upload a smaller image',
+    TRACK_REQUIRED_FOR_PERSONALISE: 'Track is required to generate assessments',
+    PERSONALISATION_FAILED: 'Personalisation failed, please try again',
   },
   COMMON: {
     INSUFFICIENT_PERMISSIONS: 'Insufficient permissions',
