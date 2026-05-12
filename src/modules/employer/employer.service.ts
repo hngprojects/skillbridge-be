@@ -177,6 +177,29 @@ export class EmployerService {
     };
   }
 
+  async removeFromShortlist(
+    employerId: string,
+    candidateId: string,
+  ): Promise<{ status: string; message: string }> {
+    const shortlist = await this.shortlistRepository.findByEmployerAndCandidate(
+      employerId,
+      candidateId,
+    );
+    if (!shortlist) {
+      throw new NotFoundError(ErrorMessages.SHORTLIST.ENTRY_NOT_FOUND);
+    }
+
+    await this.shortlistRepository.deleteByEmployerAndCandidate(
+      employerId,
+      candidateId,
+    );
+
+    return {
+      status: 'success',
+      message: SuccessMessages.SHORTLIST.CANDIDATE_REMOVED,
+    };
+  }
+
   async getShortlist(
     employerId: string,
     query: GetEmployerShortlistQueryDto,

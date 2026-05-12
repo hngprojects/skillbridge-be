@@ -323,6 +323,10 @@ class StubShortlistRepository {
   findByEmployer(): Promise<{ items: []; total: 0 }> {
     return Promise.resolve({ items: [], total: 0 });
   }
+
+  deleteByEmployerAndCandidate(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 const getSetCookies = (response: {

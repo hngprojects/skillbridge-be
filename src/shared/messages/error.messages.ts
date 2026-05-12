@@ -42,6 +42,7 @@ export const ErrorMessages = {
     CANDIDATE_NOT_FOUND: 'Candidate not found',
     CANDIDATE_NOT_JOB_READY: 'Only Job Ready candidates can be shortlisted',
     DUPLICATE_ENTRY: 'Candidate is already on your shortlist',
+    ENTRY_NOT_FOUND: 'Candidate is not on your shortlist',
   },
   COMMON: {
     INSUFFICIENT_PERMISSIONS: 'Insufficient permissions',

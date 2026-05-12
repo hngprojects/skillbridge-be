@@ -40,6 +40,16 @@ export class ShortlistRepository {
     return this.repository.save(shortlist);
   }
 
+  async deleteByEmployerAndCandidate(
+    employerId: string,
+    candidateId: string,
+  ): Promise<void> {
+    await this.repository.delete({
+      employer_id: employerId,
+      candidate_id: candidateId,
+    });
+  }
+
   findByEmployer(
     employerId: string,
     options: {

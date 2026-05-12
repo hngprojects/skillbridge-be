@@ -29,6 +29,7 @@ export const SuccessMessages = {
   },
   SHORTLIST: {
     CANDIDATE_ADDED: 'Candidate added to shortlist',
+    CANDIDATE_REMOVED: 'Candidate removed from shortlist',
   },
   COMMON: {
     SUCCESS: 'success',

@@ -1,9 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Res,
@@ -108,5 +111,16 @@ export class EmployerController {
     @Query() query: GetEmployerShortlistQueryDto,
   ) {
     return this.employerService.getShortlist(userId, query);
+  }
+
+  @Delete('shortlist/:candidateId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove a candidate from the employer shortlist' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  async removeFromShortlist(
+    @CurrentUser('sub') userId: string,
+    @Param('candidateId', ParseUUIDPipe) candidateId: string,
+  ) {
+    return this.employerService.removeFromShortlist(userId, candidateId);
   }
 }
