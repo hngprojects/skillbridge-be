@@ -11,6 +11,7 @@ import {
   ApiOperation,
   ApiOkResponse,
   ApiCookieAuth,
+  ApiProperty,
 } from '@nestjs/swagger';
 import { AssessmentService } from './assessment.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -18,7 +19,12 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../users/entities/user.entity';
 import { SuccessMessages } from '../../shared';
 
+import { IsIn, IsNotEmpty } from 'class-validator';
+
 class SubmitAssessmentDto {
+  @ApiProperty({ enum: ['PASSED', 'FAILED'] })
+  @IsNotEmpty()
+  @IsIn(['PASSED', 'FAILED'])
   result: 'PASSED' | 'FAILED';
 }
 
