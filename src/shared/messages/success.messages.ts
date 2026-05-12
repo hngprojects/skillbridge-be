@@ -16,6 +16,7 @@ export const SuccessMessages = {
   ONBOARDING: {
     TALENT_COMPLETED: 'Talent onboarding completed',
     EMPLOYER_COMPLETED: 'Employer onboarding completed',
+    EMPLOYER_PROFILE_SAVED: 'Profile saved',
     CANDIDATE_COMPLETED: 'Candidate onboarding completed',
     GOAL_SAVED: 'Goal saved',
     TRACKS_SAVED: 'Role tracks saved',

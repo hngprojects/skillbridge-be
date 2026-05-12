@@ -1,3 +1,4 @@
+/** Legacy onboarding field values (lowercase). */
 export const EMPLOYER_JOINING_AS = ['recruiter', 'founder', 'agency'] as const;
 
 export type EmployerJoiningAs = (typeof EMPLOYER_JOINING_AS)[number];
@@ -26,3 +27,23 @@ export const EMPLOYER_DESIRED_ROLES = [
 ] as const;
 
 export type EmployerDesiredRole = (typeof EMPLOYER_DESIRED_ROLES)[number];
+
+/** New employer profile onboarding (FE-ONB-EMP-001 / BE-ONB-EMP-001). */
+export const EMPLOYER_TYPES = ['Founder', 'Recruiter', 'Agency'] as const;
+
+export const EMPLOYER_COMPANY_SIZES = [
+  '1-10',
+  '11-50',
+  '51-200',
+  '201-500',
+  '500+',
+] as const;
+
+export const EMPLOYER_HIRING_LOCATIONS = [
+  'Nigeria',
+  'Africa',
+  'Remote Worldwide',
+  'UK',
+  'Europe',
+  'North America',
+] as const;
