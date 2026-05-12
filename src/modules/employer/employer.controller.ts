@@ -22,6 +22,7 @@ import { setAuthCookies } from '../auth/auth.cookies';
 import { UserRole } from '../users/entities/user.entity';
 import { CompleteEmployerOnboardingDto } from './dto/complete-employer-onboarding.dto';
 import { SaveEmployerProfileDto } from './dto/save-employer-profile.dto';
+import { AddToShortlistDto } from './dto/add-to-shortlist.dto';
 import { EmployerService } from './employer.service';
 
 @ApiTags('employer')
@@ -67,5 +68,24 @@ export class EmployerController {
       user: result.user,
       profile: result.profile,
     };
+  }
+
+  @Post('shortlist')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add a Job Ready candidate to the employer shortlist' })
+  @ApiUnprocessableEntityResponse({ description: 'Validation failed — field-specific error messages' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+    }),
+  )
+  async addToShortlist(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: AddToShortlistDto,
+  ) {
+    return this.employerService.addToShortlist(userId, dto.talentId);
   }
 }

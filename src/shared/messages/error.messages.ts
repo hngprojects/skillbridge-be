@@ -38,6 +38,11 @@ export const ErrorMessages = {
     TRACK_REQUIRED_FOR_PERSONALISE: 'Track is required to generate assessments',
     PERSONALISATION_FAILED: 'Personalisation failed, please try again',
   },
+  SHORTLIST: {
+    CANDIDATE_NOT_FOUND: 'Candidate not found',
+    CANDIDATE_NOT_JOB_READY: 'Only Job Ready candidates can be shortlisted',
+    DUPLICATE_ENTRY: 'Candidate is already on your shortlist',
+  },
   COMMON: {
     INSUFFICIENT_PERMISSIONS: 'Insufficient permissions',
     INTERNAL_SERVER_ERROR: 'Internal server error',

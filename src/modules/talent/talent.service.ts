@@ -82,6 +82,12 @@ export class TalentService {
     await this.usersService.updateAvatar(userId, avatarUrl);
   }
 
+  async findById(id: string): Promise<TalentProfile | null> {
+    return this.talentProfileRepository.findOne({
+      where: { id },
+    });
+  }
+
   /** BE-ONB-TAL-001 — save single goal, 422 on invalid. */
   async saveGoalStep(
     userId: string,

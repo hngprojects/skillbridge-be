@@ -2,14 +2,19 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthResult, AuthService } from '../auth/auth.service';
+import { TalentProfileStatus } from '../talent/entities/talent-profile.entity';
+import { TalentService } from '../talent/talent.service';
 import { UsersService } from '../users/users.service';
 import { CompleteEmployerOnboardingDto } from './dto/complete-employer-onboarding.dto';
 import { SaveEmployerProfileDto } from './dto/save-employer-profile.dto';
 import { EmployerProfile } from './entities/employer-profile.entity';
+import { ShortlistRepository } from './repositories/shortlist.repository';
 import {
+  BadRequestError,
   ConflictError,
   ErrorMessages,
   ForbiddenError,
+  NotFoundError,
   SuccessMessages,
 } from '../../shared';
 
@@ -27,6 +32,8 @@ export class EmployerService {
     private readonly employerProfileRepository: Repository<EmployerProfile>,
     private readonly authService: AuthService,
     private readonly usersService: UsersService,
+    private readonly talentService: TalentService,
+    private readonly shortlistRepository: ShortlistRepository,
   ) {}
 
   async saveProfile(
@@ -123,6 +130,47 @@ export class EmployerService {
       user: session.data.user,
       profile,
       tokens: session.tokens,
+    };
+  }
+
+  async addToShortlist(
+    employerId: string,
+    talentId: string,
+  ): Promise<{
+    status: string;
+    message: string;
+    data: { candidateId: string; shortlistedAt: string };
+  }> {
+    const talent = await this.talentService.findById(talentId);
+    if (!talent) {
+      throw new NotFoundError(ErrorMessages.SHORTLIST.CANDIDATE_NOT_FOUND);
+    }
+
+    if (talent.status !== TalentProfileStatus.JOB_READY) {
+      throw new BadRequestError(ErrorMessages.SHORTLIST.CANDIDATE_NOT_JOB_READY);
+    }
+
+    const existingShortlist =
+      await this.shortlistRepository.findByEmployerAndCandidate(
+        employerId,
+        talentId,
+      );
+    if (existingShortlist) {
+      throw new ConflictError(ErrorMessages.SHORTLIST.DUPLICATE_ENTRY);
+    }
+
+    const shortlist = await this.shortlistRepository.create(
+      employerId,
+      talentId,
+    );
+
+    return {
+      status: 'success',
+      message: SuccessMessages.SHORTLIST.CANDIDATE_ADDED,
+      data: {
+        candidateId: talentId,
+        shortlistedAt: shortlist.saved_at.toISOString(),
+      },
     };
   }
 }
