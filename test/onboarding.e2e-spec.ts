@@ -401,7 +401,12 @@ describe('Onboarding (e2e)', () => {
             onModuleInit: jest.fn(),
           },
         },
-        { provide: UploadService, useValue: { uploadAvatar: jest.fn() } },
+        {
+          provide: UploadService,
+          useValue: {
+            uploadAvatar: jest.fn().mockResolvedValue('https://bucket.s3.region.amazonaws.com/avatars/test.jpg'),
+          },
+        },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_GUARD, useClass: RolesGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
