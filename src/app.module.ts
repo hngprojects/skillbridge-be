@@ -19,6 +19,7 @@ import { EmployerModule } from './modules/employer/employer.module';
 import { HealthModule } from './modules/health/health.module';
 import { InquiriesModule } from './modules/inquiries/inquiries.module';
 import { MailModule } from './modules/mail/mail.module';
+import { TasksModule } from './modules/tasks/tasks.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProbeController } from './probe.controller';
 import { WelcomeController } from './welcome.controller';
@@ -40,6 +41,7 @@ import { WelcomeController } from './welcome.controller';
     AuthModule,
     TalentModule,
     EmployerModule,
+    TasksModule,
     MailModule,
   ],
   providers: [
