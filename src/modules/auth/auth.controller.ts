@@ -44,6 +44,7 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { VerifyPasswordResetOtpDto } from './dto/verify-password-reset-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyGoogleAuthCodeDto } from './dto/verify-google-auth-code.dto';
 import { OAuthSignupRoleRequiredException } from './exceptions/oauth-signup-role-required.exception';
 import type { GoogleProfile } from './strategies/google.strategy';
 import {
@@ -233,6 +234,34 @@ export class AuthController {
         `${this.authService.getFrontendOrigin()}/login?error=${key}`,
       );
     }
+  }
+
+  @Public()
+  @Post('google/verify-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify Google auth code from frontend',
+    description:
+      'Exchanges an authorization code from the frontend for backend access and refresh tokens.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Returns the user session and sets auth cookies.',
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid authorization code or failed to fetch profile.',
+  })
+  async verifyGoogleCode(
+    @Body() dto: VerifyGoogleAuthCodeDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.verifyGoogleAuthCode(
+      dto.code,
+      dto.redirectUri,
+      dto.role,
+    );
+    setAuthCookies(response, result.tokens);
+    return this.authService.toResponse(result);
   }
 
   @Public()
