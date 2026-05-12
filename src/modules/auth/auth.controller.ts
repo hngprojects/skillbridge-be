@@ -42,6 +42,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { VerifyPasswordResetOtpDto } from './dto/verify-password-reset-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { OAuthSignupRoleRequiredException } from './exceptions/oauth-signup-role-required.exception';
 import type { GoogleProfile } from './strategies/google.strategy';
@@ -134,11 +135,26 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(ThrottlerGuard)
+  @Post('verify-reset-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify a password reset OTP' })
+  @ApiBadRequestResponse({
+    description: 'Invalid, expired, or already used OTP',
+  })
+  @ApiTooManyRequestsResponse({
+    description: 'Too many requests — limit is 5 per minute per IP',
+  })
+  async verifyResetOtp(@Body() dto: VerifyPasswordResetOtpDto) {
+    return this.authService.verifyPasswordResetOtp(dto);
+  }
+
+  @Public()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Set a new password using a reset token' })
+  @ApiOperation({ summary: 'Set a new password using a reset OTP' })
   @ApiBadRequestResponse({
-    description: 'Invalid, expired, or already used token',
+    description: 'Invalid, expired, or already used OTP',
   })
   @ApiUnprocessableEntityResponse({
     description: 'Passwords do not match',

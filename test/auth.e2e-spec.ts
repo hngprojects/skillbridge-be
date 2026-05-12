@@ -459,6 +459,7 @@ const mockPasswordResetOtpService = {
     code: '123456',
     expiresAt: new Date(Date.now() + 15 * 60 * 1000),
   }),
+  verify: jest.fn().mockResolvedValue(true),
   consume: jest.fn().mockResolvedValue(true),
   countRecentResends: jest.fn().mockResolvedValue(0),
 };
@@ -645,6 +646,61 @@ describe('Auth (e2e)', () => {
     expect(sixth.body).toMatchObject({
       success: false,
       status_code: 429,
+    });
+  });
+
+  it('POST /auth/verify-reset-otp returns 200 for a valid password reset OTP', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/verify-reset-otp')
+      .send({ email: registerPayload.email, otp: '123456' })
+      .expect(200);
+
+    const user = await usersService.findByEmail(registerPayload.email);
+    expect(mockPasswordResetOtpService.verify).toHaveBeenCalledWith(
+      user?.id,
+      '123456',
+    );
+    expect(mockPasswordResetOtpService.consume).not.toHaveBeenCalled();
+    expect(response.body).toMatchObject({
+      status: 'success',
+      message: SuccessMessages.AUTH.PASSWORD_RESET_OTP_VERIFIED,
+    });
+  });
+
+  it('POST /auth/verify-reset-otp returns 400 for an invalid password reset OTP', async () => {
+    mockPasswordResetOtpService.verify.mockResolvedValueOnce(false);
+
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send(registerPayload)
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/verify-reset-otp')
+      .send({ email: registerPayload.email, otp: '999999' })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      success: false,
+      status_code: 400,
+    });
+  });
+
+  it('POST /auth/verify-reset-otp returns 400 for an unknown email', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/verify-reset-otp')
+      .send({ email: 'missing@example.com', otp: '123456' })
+      .expect(400);
+
+    expect(mockPasswordResetOtpService.verify).not.toHaveBeenCalled();
+    expect(response.body).toMatchObject({
+      success: false,
+      status_code: 400,
     });
   });
 
