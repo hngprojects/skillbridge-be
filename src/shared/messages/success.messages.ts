@@ -27,6 +27,10 @@ export const SuccessMessages = {
     AVATAR_UPLOADED: 'Avatar uploaded successfully',
     DASHBOARD_PERSONALISED: 'Dashboard personalised',
   },
+  ASSESSMENT: {
+    STARTED: 'Assessment started.',
+    SUBMITTED: 'Assessment result recorded.',
+  },
   COMMON: {
     SUCCESS: 'success',
     API_PROBE: 'I am the NestJs api responding',
