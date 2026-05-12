@@ -24,6 +24,7 @@ import {
 import { EmployerController } from '../src/modules/employer/employer.controller';
 import { EmployerService } from '../src/modules/employer/employer.service';
 import { EmployerProfile } from '../src/modules/employer/entities/employer-profile.entity';
+import { ShortlistRepository } from '../src/modules/employer/repositories/shortlist.repository';
 import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
@@ -310,6 +311,20 @@ class StubVerificationOtpService {}
 
 class StubMailService {}
 
+class StubShortlistRepository {
+  findByEmployerAndCandidate(): Promise<null> {
+    return Promise.resolve(null);
+  }
+
+  create(): Promise<never> {
+    throw new Error('ShortlistRepository is not available in onboarding e2e tests');
+  }
+
+  findByEmployer(): Promise<{ items: []; total: 0 }> {
+    return Promise.resolve({ items: [], total: 0 });
+  }
+}
+
 const getSetCookies = (response: {
   headers: Record<string, string | string[] | undefined>;
 }): string[] => {
@@ -407,6 +422,7 @@ describe('Onboarding (e2e)', () => {
             uploadAvatar: jest.fn().mockResolvedValue('https://bucket.s3.region.amazonaws.com/avatars/test.jpg'),
           },
         },
+        { provide: ShortlistRepository, useClass: StubShortlistRepository },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: APP_GUARD, useClass: RolesGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },

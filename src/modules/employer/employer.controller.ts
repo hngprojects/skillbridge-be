@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   Res,
   UsePipes,
   ValidationPipe,
@@ -23,6 +25,7 @@ import { UserRole } from '../users/entities/user.entity';
 import { CompleteEmployerOnboardingDto } from './dto/complete-employer-onboarding.dto';
 import { SaveEmployerProfileDto } from './dto/save-employer-profile.dto';
 import { AddToShortlistDto } from './dto/add-to-shortlist.dto';
+import { GetEmployerShortlistQueryDto } from './dto/get-employer-shortlist-query.dto';
 import { EmployerService } from './employer.service';
 
 @ApiTags('employer')
@@ -87,5 +90,23 @@ export class EmployerController {
     @Body() dto: AddToShortlistDto,
   ) {
     return this.employerService.addToShortlist(userId, dto.talentId);
+  }
+
+  @Get('shortlist')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get the authenticated employer shortlist' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+    }),
+  )
+  async getShortlist(
+    @CurrentUser('sub') userId: string,
+    @Query() query: GetEmployerShortlistQueryDto,
+  ) {
+    return this.employerService.getShortlist(userId, query);
   }
 }
