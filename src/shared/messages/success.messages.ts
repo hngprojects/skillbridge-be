@@ -17,11 +17,15 @@ export const SuccessMessages = {
   ONBOARDING: {
     TALENT_COMPLETED: 'Talent onboarding completed',
     EMPLOYER_COMPLETED: 'Employer onboarding completed',
+    EMPLOYER_PROFILE_SAVED: 'Profile saved',
     CANDIDATE_COMPLETED: 'Candidate onboarding completed',
     GOAL_SAVED: 'Goal saved',
+    TRACK_SAVED: 'Track saved',
     TRACKS_SAVED: 'Role tracks saved',
     PROFILE_SAVED: 'Profile saved',
+    TALENT_PROFILE_SAVED: 'Profile saved',
     AVATAR_UPLOADED: 'Avatar uploaded successfully',
+    DASHBOARD_PERSONALISED: 'Dashboard personalised',
   },
   COMMON: {
     SUCCESS: 'success',

@@ -67,6 +67,19 @@ export class TalentProfile {
   @Column({ type: 'varchar', length: 255, nullable: true })
   linkedin_url: string | null;
 
+  @ApiProperty({
+    example: 'frontend_developer',
+    required: false,
+    nullable: true,
+    description: 'Single selected track (step 2)',
+  })
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  track: string | null;
+
+  @ApiProperty({ default: false, description: 'True when all profile fields including optional ones are complete' })
+  @Column({ type: 'boolean', default: false })
+  profile_verified: boolean;
+
   @ApiProperty({ default: 0 })
   @Column({ type: 'integer', default: 0 })
   onboarding_step: number;

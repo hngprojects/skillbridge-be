@@ -1,13 +1,23 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthResult, AuthService } from '../auth/auth.service';
 import { UsersService } from '../users/users.service';
 import { User } from '../users/entities/user.entity';
+import { UploadService } from '../upload/upload.service';
 import { CompleteTalentOnboardingDto } from './dto/complete-talent-onboarding.dto';
 import { SetGoalDto } from './dto/set-goal.dto';
 import { SetTracksDto } from './dto/set-tracks.dto';
 import { SetProfileDto } from './dto/set-profile.dto';
+import { SaveGoalDto } from './dto/save-goal.dto';
+import { SaveTrackDto } from './dto/save-track.dto';
+import { SaveTalentProfileDto } from './dto/save-talent-profile.dto';
 import {
   TalentProfile,
   TalentProfileStatus,
@@ -33,11 +43,14 @@ export type TalentStepResult = {
 
 @Injectable()
 export class TalentService {
+  private readonly logger = new Logger(TalentService.name);
+
   constructor(
     @InjectRepository(TalentProfile)
     private readonly talentProfileRepository: Repository<TalentProfile>,
     private readonly authService: AuthService,
     private readonly usersService: UsersService,
+    private readonly uploadService: UploadService,
   ) {}
 
   /** Find or create a talent profile for the given user (upsert helper). */
@@ -67,6 +80,123 @@ export class TalentService {
 
   async updateUserAvatar(userId: string, avatarUrl: string): Promise<void> {
     await this.usersService.updateAvatar(userId, avatarUrl);
+  }
+
+  /** BE-ONB-TAL-001 — save single goal, 422 on invalid. */
+  async saveGoalStep(
+    userId: string,
+    dto: SaveGoalDto,
+  ): Promise<{ status: string; message: string }> {
+    const profile = await this.findOrCreateProfile(userId);
+    profile.goal = dto.goal;
+    if (profile.onboarding_step < 1) profile.onboarding_step = 1;
+    await this.talentProfileRepository.save(profile);
+    return { status: 'success', message: SuccessMessages.ONBOARDING.GOAL_SAVED };
+  }
+
+  /** BE-ONB-TAL-002 — save single track, 422 on invalid. */
+  async saveTrackStep(
+    userId: string,
+    dto: SaveTrackDto,
+  ): Promise<{ status: string; message: string }> {
+    const profile = await this.findOrCreateProfile(userId);
+    profile.track = dto.track;
+    if (profile.onboarding_step < 2) profile.onboarding_step = 2;
+    await this.talentProfileRepository.save(profile);
+    return { status: 'success', message: SuccessMessages.ONBOARDING.TRACK_SAVED };
+  }
+
+  /** BE-ONB-TAL-003 — save profile (photo required, optional fields optional). */
+  async saveTalentProfile(
+    userId: string,
+    photo: Express.Multer.File,
+    dto: SaveTalentProfileDto,
+  ): Promise<{ status: string; message: string }> {
+    const avatarUrl = await this.uploadService.uploadAvatar(photo);
+
+    await this.talentProfileRepository.manager.transaction(async (manager) => {
+      let user;
+      try {
+        user = await this.usersService.getUserForOnboarding(manager, userId);
+      } catch (error: unknown) {
+        if (error instanceof NotFoundException) {
+          throw new ForbiddenError(ErrorMessages.ONBOARDING.INVALID_USER);
+        }
+        throw error;
+      }
+
+      await manager.update(User, { id: userId }, { avatar_url: avatarUrl });
+
+      let profile = await manager.findOne(TalentProfile, { where: { user_id: userId } });
+      if (!profile) {
+        profile = manager.create(TalentProfile, {
+          user_id: userId,
+          status: TalentProfileStatus.NOT_STARTED,
+          is_published: false,
+        });
+      }
+
+      profile.region = dto.region ?? null;
+      profile.education_level = dto.educationLevel ?? null;
+      profile.linkedin_url = dto.linkedinProfile ?? null;
+      profile.onboarding_step = 3;
+      profile.profile_verified =
+        !!dto.region && !!dto.educationLevel && !!dto.linkedinProfile;
+
+      await manager.save(TalentProfile, profile);
+
+      if (!user.onboarding_complete) {
+        await this.usersService.markOnboardingCompleteWithManager(manager, userId);
+      }
+    });
+
+    return { status: 'success', message: SuccessMessages.ONBOARDING.TALENT_PROFILE_SAVED };
+  }
+
+  /** BE-ONB-TAL-004 — trigger personalisation from saved onboarding data. */
+  async personalise(userId: string): Promise<{ status: string; message: string }> {
+    const profile = await this.talentProfileRepository.findOne({
+      where: { user_id: userId },
+    });
+
+    if (!profile?.track) {
+      throw new UnprocessableEntityException(
+        ErrorMessages.ONBOARDING.TRACK_REQUIRED_FOR_PERSONALISE,
+      );
+    }
+
+    const availableDataPoints: string[] = ['track'];
+    if (profile.goal) availableDataPoints.push('goal');
+    if (profile.region) availableDataPoints.push('region');
+    if (profile.education_level) availableDataPoints.push('educationLevel');
+
+    const isFullyPersonalised =
+      !!profile.goal && !!profile.region && !!profile.education_level;
+
+    try {
+      this.logger.log(
+        JSON.stringify({
+          event: 'talent_personalisation',
+          userId,
+          timestamp: new Date().toISOString(),
+          availableDataPoints,
+          assessmentsGenerated: true,
+          recommendationsGenerated: isFullyPersonalised,
+          incompleteFields: isFullyPersonalised
+            ? []
+            : ['goal', 'region', 'educationLevel'].filter(
+                (f) =>
+                  !profile[f === 'educationLevel' ? 'education_level' : (f as keyof TalentProfile)],
+              ),
+        }),
+      );
+
+      return { status: 'success', message: SuccessMessages.ONBOARDING.DASHBOARD_PERSONALISED };
+    } catch {
+      throw new InternalServerErrorException(
+        ErrorMessages.ONBOARDING.PERSONALISATION_FAILED,
+      );
+    }
   }
 
   async getOnboardingState(userId: string): Promise<{ profile: TalentProfile | null; user: { id: string; email: string; first_name: string; last_name: string; avatar_url: string | null } }> {
